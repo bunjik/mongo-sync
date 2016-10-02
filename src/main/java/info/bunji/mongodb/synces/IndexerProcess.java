@@ -1,0 +1,300 @@
+/*
+ * Copyright 2016 Fumiharu Kinoshita
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+package info.bunji.mongodb.synces;
+
+import java.io.IOException;
+import java.util.EventListener;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+
+import org.bson.BsonTimestamp;
+import org.elasticsearch.action.bulk.BulkProcessor;
+import org.elasticsearch.action.bulk.BulkRequest;
+import org.elasticsearch.action.bulk.BulkResponse;
+import org.elasticsearch.action.delete.DeleteRequest;
+import org.elasticsearch.action.index.IndexRequest;
+import org.elasticsearch.action.update.UpdateRequest;
+import org.elasticsearch.client.Client;
+import org.elasticsearch.common.unit.ByteSizeUnit;
+import org.elasticsearch.common.unit.ByteSizeValue;
+import org.elasticsearch.common.unit.TimeValue;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import info.bunji.asyncutil.AsyncExecutor;
+import info.bunji.asyncutil.AsyncProcess;
+import info.bunji.asyncutil.AsyncResult;
+import info.bunji.mongodb.synces.util.EsUtils;
+
+/**
+ ************************************************
+ * elasticsearchにデータを同期するクラス.
+ *
+ * 同期設定単位にインスタンスされる
+ *
+ * @author Fumiharu Kinoshita
+ ************************************************
+ */
+public class IndexerProcess extends AsyncProcess<Boolean>
+									implements StatusChangeListener, BulkProcessor.Listener {
+
+	private Logger logger = LoggerFactory.getLogger(getClass());
+
+	private final Client esClient;
+	private final SyncConfig config;
+	private final String indexName;
+	private AsyncResult<MongoOperation> operations;
+	private final Listener listener;
+
+	private BsonTimestamp oplogTs;
+	private long indexCnt;
+
+	private static final int DEFAULT_BUlK_ACTIONS = 5000;
+
+	private static final long DEFAULT_BUlK_INTERVAL = 500;	// ms
+
+	private static final long DEFAULT_BULK_SIZE = 64; // MB
+
+	private CountDownLatch latch = new CountDownLatch(1);
+
+	/**
+	 **********************************
+	 * @param esClient
+	 * @param config
+	 * @param operations
+	 **********************************
+	 */
+	IndexerProcess(Client esClient, SyncConfig config, Listener listener, AsyncResult<MongoOperation> operations) {
+		this.esClient = esClient;
+		this.config = config;
+		this.operations = operations;
+		this.indexName = config.getIndexName();
+		this.listener = listener;
+	}
+
+	/**
+	 **********************************
+	 *
+	 **********************************
+	 */
+	@Override
+	public void execute() {
+		logger.info("■ start sync [" + config.getSyncName() + "]");
+		BulkProcessor processor = getBulkProcessor();
+		try {
+			for (MongoOperation op : operations) {
+				// monodbの操作日時を取得
+				oplogTs = op.getTimestamp();
+
+				// TODO:同期対象外が続いた場合は、一定件数毎にステータスを更新したほうが良いかも？
+
+				if (!config.isTargetCollection(op.getCollection()) && !SyncConfig.STATUS_INDEX.equals(op.getIndex())) {
+					// 同期対象外
+					continue;
+				}
+
+				switch (op.getOp()) {
+
+				// ドキュメント追加/更新時
+				case INSERT:
+				case UPDATE:
+					indexCnt = config.addSyncCount();
+					processor.add(makeIndexRequest(op));
+					break;
+
+				// ドキュメント削除時
+				case DELETE:
+					indexCnt = config.addSyncCount();
+					processor.add(makeDeleteRequest(op));
+					break;
+
+				// コレクション削除
+				case DROP_COLLECTION:
+					// es2.x はtypeの削除が不可となったため、1件づつデータを削除する
+					// 削除処理はoplogとの不整合を防ぐため、同期で実行する
+					logger.info(op.getOp() + " index:" + indexName + " type:" + op.getCollection());
+					AsyncExecutor.execute(new EsTypeDeleter(esClient, indexName, op.getCollection())).block();
+					logger.debug("type deleted.[, op.getCollection()]");
+
+					// ステータス更新用のリクエストを追加する
+					processor.add(EsUtils.makeStatusRequest(config, null, oplogTs));
+					break;
+
+				// データベース削除
+				case DROP_DATABASE:
+					logger.debug("not implemented yet. " + op.getOp());
+					break;
+
+				// 未対応もしくは不明な操作
+				default:
+					logger.warn("unsupported operation. " + op.getOp());
+					break;
+				}
+			}
+		} catch (Throwable t) {
+			processor.add(EsUtils.makeStatusRequest(config, "STOPPED", null));
+			logger.error("indexer stopped. [" + config.getSyncName() + "]", t);
+			throw t;
+		} finally {
+			try {
+				operations.close();
+			} catch (IOException ioe) {
+				// do nothing.
+			}
+			try {
+				processor.flush();
+				processor.awaitClose(10, TimeUnit.SECONDS);
+				//logger.debug("bulk processer flushed.");
+				logger.info("■stop sync [" + config.getSyncName() + "]");
+
+				if (listener != null) {
+					// 終了の通知
+					listener.onIndexerStop(config.getSyncName());
+				}
+			} catch (InterruptedException e) {
+				e.printStackTrace();
+			}
+			latch.countDown();
+		}
+	}
+
+	public SyncConfig getConfig() {
+		return config;
+	}
+
+	/**
+	 ********************************************
+	 * ドキュメント登録・更新用のリクエストを生成する.
+	 * @param op
+	 * @return
+	 ********************************************
+	 */
+	private UpdateRequest makeIndexRequest(MongoOperation op) {
+		String json = op.getJson();
+		IndexRequest insert = new IndexRequest(op.getIndex())
+								.type(op.getCollection())
+								.id(op.getId())
+								.source(json);
+		UpdateRequest update = new UpdateRequest(insert.index(), insert.type(), insert.id())
+								.doc(json)
+								.upsert(insert);
+		return update;
+	}
+
+	/**
+	 ********************************************
+	 * ドキュメント削除用のリクエストを生成する
+	 * @param op
+	 * @return
+	 ********************************************
+	 */
+	private DeleteRequest makeDeleteRequest(MongoOperation op) {
+		DeleteRequest request = new DeleteRequest(op.getIndex())
+								.type(op.getCollection())
+								.id(op.getId());
+		return request;
+	}
+
+	/**
+	 ********************************************
+	 * elasticsearchへのバルク処理を行うProcessorのインスタンスを取得する.
+	 * <br>
+	 * 取得したProcessorに対して更新データを追加していくだけで、追加されたデータが
+	 * いずれかの条件（経過時間、格納件数、合計サイズ）を満たすと自動的にバルク処理が実行される。
+	 * @return BulkProcessorのインスタンス。
+	 ********************************************
+	 */
+	private BulkProcessor getBulkProcessor() {
+		return BulkProcessor.builder(esClient, this)
+					.setBulkActions(DEFAULT_BUlK_ACTIONS)
+					.setBulkSize(new ByteSizeValue(DEFAULT_BULK_SIZE, ByteSizeUnit.MB))
+					.setFlushInterval(TimeValue.timeValueMillis(DEFAULT_BUlK_INTERVAL))
+					.setConcurrentRequests(1)
+					.build();
+	}
+
+	/**
+	 ********************************************
+	 * バルク処理の開始前に呼び出される.
+	 * @see org.elasticsearch.action.bulk.BulkProcessor.Listener#beforeBulk(long, org.elasticsearch.action.bulk.BulkRequest)
+	 ********************************************
+	 */
+	@Override
+	public void beforeBulk(long executionId, BulkRequest request) {
+		if (oplogTs != null) {
+			// ステータス更新用のリクエストを追加する
+			request.add(EsUtils.makeStatusRequest(config, null, oplogTs));
+		}
+		//logger.debug("call beforeBulk() size=" + request.numberOfActions() + " ts=" + curTs);
+	}
+
+	/**
+	 ********************************************
+	 * バルク処理の終了時(エラーあり)に呼び出される.
+	 * @see org.elasticsearch.action.bulk.BulkProcessor.Listener#afterBulk(long, org.elasticsearch.action.bulk.BulkRequest, java.lang.Throwable)
+	 ********************************************
+	 */
+	@Override
+	public void afterBulk(long executionId, BulkRequest request, Throwable failure) {
+		logger.error("call afterBulk() with failure. " + failure.getMessage(), failure);
+	}
+
+	/**
+	 ********************************************
+	 * バルク処理の終了時(エラーなし)に呼び出される.
+	 *
+	 * @see org.elasticsearch.action.bulk.BulkProcessor.Listener#afterBulk(long, org.elasticsearch.action.bulk.BulkRequest, org.elasticsearch.action.bulk.BulkResponse)
+	 ********************************************
+	 */
+	@Override
+	public void afterBulk(long executionId, BulkRequest request, BulkResponse response) {
+		logger.trace(String.format("call afterBulk() size=%d, [%dms]",
+								 response.getItems().length,
+								 response.getTookInMillis()));
+		if (response.hasFailures()) {
+			logger.error(response.buildFailureMessage());
+		}
+	}
+
+	/*
+	 * (非 Javadoc)
+	 * @see info.bunji.mongodb.synces.StatusChangeListener#stop()
+	 */
+	@Override
+	public void stop() {
+		try {
+			// データの取得処理を終了することで、Indexerを終了させる
+			operations.close();
+		} catch (IOException e) {
+			logger.error(e.getMessage(), e);
+		}
+	}
+
+	/**
+	 ********************************************
+	 * イベント通知用インターフェース
+	 ********************************************
+	 */
+	static interface Listener extends EventListener {
+		/**
+		 ******************************
+		 * indexerの停止時に呼び出されるメソッド.
+		 * @param syncName 同期設定名
+		 ******************************
+		 */
+		void onIndexerStop(String syncName);
+	}
+}

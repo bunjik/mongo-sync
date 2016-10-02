@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="en" x-ng-app="mongoSyncApp">
+<head>
+<meta charset="utf-8">
+<title>MongoDB Sync for ElasticSearch</title>
+<link rel="stylesheet" href="css/bootstrap.min.css">
+<script type="text/javascript" src="js/angular.min.js"></script>
+<script type="text/javascript" src="js/angular-resource.min.js"></script>
+<script type="text/javascript" src="js/ui-bootstrap-tpls-2.1.3.min.js"></script>
+<link rel="icon" href="images/favicon.ico" type="image/x-icon">
+<script>
+var app = angular.module('mongoSyncApp', ['ngResource', 'ui.bootstrap']);
+
+app.constant('appSettings', {
+	defaultRefresh: 5000
+});
+
+app.controller('MainCtrl', function ($log, $scope, $resource, $timeout, appSettings) {
+	var syncConfigs = $resource('/api/configs/:action/:id', {id:'@id'},
+		{
+			list: {method:'GET', params: {action: 'list'}},
+			start: {method:'POST', params: {action: 'start'}},
+			stop: {method:'POST', params: {action: 'stop'}},
+			delete: {method:'POST', params: {action: 'delete'}}
+		}
+	);
+
+	$scope.configs = [];
+
+	$scope.list = function() {
+		syncConfigs.list(function(data) {
+			$scope.configs = data.results;
+			angular.forEach($scope.configs, function(value, key) {
+				value['isCollapsed'] = true;
+			});
+		});
+	};
+
+	$scope.start = function(name) {
+		console.log('start: ' + name);
+		syncConfigs.start({'id': name}, function(river, response) {
+			console.log(river);
+			console.log(response);
+			$scope.list();
+		});
+	};
+
+	$scope.stop = function(name) {
+		console.log('stop: ' + name);
+		syncConfigs.stop({'id': name}, function() {
+			$scope.list();
+		});
+	};
+
+	$scope.delete = function(name) {
+		$log.log('delete: ' + name);
+		syncConfigs.delete({'id': name}, function() {
+			$scope.list();
+		});
+	};
+
+	$scope.toString = function(object) {
+		var value = JSON.stringify(angular.copy(object), undefined, 2);
+		return value;
+	};
+
+	$scope.list();
+});
+</script>
+</head>
+<body>
+	<div x-ng-controller="MainCtrl" class="container">
+		<div class="row">
+			<div class="col-md-12">
+				<div>
+    			    <h3>MongoDB Sync Administration</h3>
+<!--
+        <span class="btn btn-small pull-right" x-ng-class="{ 'btn-info': refresh.enabled, 'btn-warning': !refresh.enabled }"
+          x-ng-click="updateTimer(refresh.enabled)">{{ refresh.label }}</span>
+        <span class="btn btn-small pull-right" x-ng-class="{ 'btn-info': next.enabled, 'btn-default disabled': !next.enabled }"
+          x-ng-click="nextPage()" style="margin-right: 10px;">{{ next.label }}</span>
+        <span class="btn btn-small pull-right" x-ng-class="{ 'btn-info': prev.enabled, 'btn-default disabled': !prev.enabled }"
+          x-ng-click="prevPage()" style="margin-right: 10px;">{{ prev.label }}</span>
+-->
+				</div>
+
+				<div x-ng-repeat="(syncName, config) in configs">
+					<div class="panel panel-info">
+						<div class="panel-heading">
+							<span class="h4">{{ syncName }}</span>
+							　<span class="panel-title" x-ng-switch="config.status">
+								<span x-ng-switch-when="RUNNING" class="label label-success">{{config.status}}</span>
+								<span x-ng-switch-when="INITIAL_IMPORTING" class="label label-success">{{config.status}}</span>
+								<span x-ng-switch-when="STOPPED" class="label label-warning">{{config.status}}</span>
+								<span x-ng-switch-default class="label label-danger">{{config.status}}</span>
+							</span>
+							　<span class="glyphicon glyphicon-time"></span> Last Replicated : <b>{{ config.lastTimestamp ? (config.lastTimestamp | date:'yyyy-MM-dd HH:mm:ss Z') : 'never' }}</b>
+							　<span class="glyphicon glyphicon-save"></span> Documents Indexed : <b>{{ config.indexCnt }}</b>
+							<button type="button" class="btn btn-default btn-sm pull-right" x-ng-click="config['isCollapsed'] = !config['isCollapsed']">Toggle setting</button>
+						</div>
+						<div class="panel-body">
+							<div x-uib-collapse="config['isCollapsed']">
+								<div><pre>{{ toString(config.config) }}</pre></div>
+								<hr/>
+							</div>
+							<span x-ng-if="config.status == 'RUNNING' || config.status == 'INITIIAL_IMPORTING'" class="btn btn-sm btn-danger" x-ng-click="stop(syncName)">Stop</span>
+							<span x-ng-if="config.status != 'RUNNING' && config.status == 'INITIIAL_IMPORTING'" class="btn btn-sm btn-success" x-ng-click="start(syncName)">Start</span>
+							<span x-ng-if="config.status != 'RUNNING' && config.status == 'INITIIAL_IMPORTING'" class="btn btn-sm btn-danger pull-right" x-ng-click="delete(syncName)">Delete</span>
+						</div>
+					</div>
+				</div>
+			</div>
+		</div>
+	</div>
+<!--
+	<script type="text/javascript" src="js/app.js"></script>
+  -->
+</body>
+</html>

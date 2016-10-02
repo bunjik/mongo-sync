@@ -1,0 +1,21 @@
+<!DOCTYPE logback>
+<configuration>
+  <appender name="STDOUT" class="ch.qos.logback.core.ConsoleAppender">
+    <encoder>
+<!--
+      <pattern>%d [%-5level] %c{0} %msg%n</pattern>
+-->
+      <pattern>%d [%-5level] [%t] %c{0} %msg%n</pattern>
+    </encoder>
+  </appender>
+
+  <logger name="chapters.configuration" level="WARN"/>
+
+  <logger name="org.elasticsearch.river.mongodb" level="TRACE"/>
+  <logger name="info.bunji.mongodb" level="TRACE"/>
+  <logger name="info.bunji.asyncutil" level="debug"/>
+
+  <root level="info">
+    <appender-ref ref="STDOUT" />
+  </root>
+</configuration>
