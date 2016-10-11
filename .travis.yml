@@ -1,0 +1,4 @@
+language: java
+
+after_success:
+  - mvn -DdryRun=false clean cobertura:cobertura coveralls:report
