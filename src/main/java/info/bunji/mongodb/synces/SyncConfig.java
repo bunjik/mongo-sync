@@ -203,7 +203,6 @@ public class SyncConfig {
 		return ToStringBuilder.reflectionToString(this, ToStringStyle.SIMPLE_STYLE);
 	}
 
-
 	/**
 	 ********************************************
 	 * インポート対象のコレクション一覧を返す.
@@ -233,6 +232,7 @@ public class SyncConfig {
 	 ********************************************
 	 */
 	public boolean isTargetCollection(String name) {
+		if (name == null) return false;
 		if (importCollections.isEmpty()) return true;
 		return importCollections.contains(name);
 	}

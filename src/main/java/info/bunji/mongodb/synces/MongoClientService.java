@@ -19,7 +19,6 @@ import org.slf4j.LoggerFactory;
 import com.mongodb.MongoClient;
 import com.mongodb.MongoClientOptions;
 import com.mongodb.MongoCredential;
-import com.mongodb.MongoException;
 import com.mongodb.ServerAddress;
 
 import info.bunji.mongodb.synces.SyncConfig.MongoConnection;
@@ -60,12 +59,11 @@ public class MongoClientService implements MongoCachedClient.Listener {
 			client = mongoClients.get(cacheKey);
 			if (client != null) {
 				try {
-					// コネクションが利用可能かチェックする
-					// とりあえずサーバに接続するAPIをコールする？
-					client.getReadPreference();
+					// validate client
+					client.listDatabaseNames();
 					isValidConnection = true;
-				} catch (MongoException me) {
-					// 再接続が必要
+				} catch (Exception me) {
+					// needs reconnect
 					mongoClients.remove(cacheKey);
 					client.forceClose();
 				}
@@ -104,8 +102,9 @@ public class MongoClientService implements MongoCachedClient.Listener {
 				mongoClients.put(cacheKey, client);
 			}
 
-			int refCount = client.addRefCount();
-			logger.trace("current mongoClient refCount = " + refCount);
+			client.addRefCount();
+			//int refCount = client.addRefCount();
+			//logger.trace("current mongoClient refCount = " + refCount);
 		}
 		return client;
 	}

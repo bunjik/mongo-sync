@@ -17,11 +17,14 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import info.bunji.asyncutil.AsyncProcess;
+import info.bunji.mongodb.synces.util.EsUtils;
 
 /**
+ ************************************************
  * 指定されたインデックスのタイプに含まれるデータをすべて削除する.
  *
  * @author Fumiharu Kinoshita
+ ************************************************
  */
 public class EsTypeDeleter extends AsyncProcess<Boolean> {
 
@@ -40,54 +43,61 @@ public class EsTypeDeleter extends AsyncProcess<Boolean> {
 	@Override
 	protected void execute() throws Exception {
 
+		// 削除対象インデックスの存在チェック
 		IndicesExistsResponse res = esClient.admin().indices().exists(new IndicesExistsRequest(index)).actionGet();
-		if (!res.isExists()) {
-			return;
-		}
-
+		int retry = 10;
+		long delcount = 0;
 		try {
-			// 対象タイプのドキュメントを全削除
-			QueryBuilder qb = QueryBuilders.matchAllQuery();
-			SearchResponse scrollRes = esClient.prepareSearch(index)
-					.setTypes(type)
-					.setQuery(qb)
-					.addFields("_id")
-					.setScroll(new TimeValue(60000))
-					.setSize(1000).execute().actionGet();
-
-			BulkRequestBuilder bulkRequest = esClient.prepareBulk();
-			long delcount = 0;
-			while (true) {
-				for (SearchHit hit : scrollRes.getHits().getHits()) {
-					//Handle the hit...
-					if ((++delcount % 5000) == 0) {
-						logger.debug("deleting " + index + "/" + type + "(" + delcount + ")");
-					}
-					bulkRequest.add(esClient.prepareDelete(index, type, hit.getId()));
-				}
-				scrollRes = esClient.prepareSearchScroll(scrollRes.getScrollId())
-								.setScroll(new TimeValue(6000000))
-								.execute().actionGet();
-
-				// Break condition: No hits are returned
-				if (scrollRes.getHits().getHits().length == 0) {
+			while (retry > 0) {
+				if (!res.isExists()) {
 					break;
 				}
-			}
 
-			if (bulkRequest.numberOfActions() > 0) {
-				BulkResponse bulkResponse = bulkRequest.execute().actionGet();
-				if (bulkResponse.hasFailures()) {
-					// process failures by iterating through each bulk response item
-					logger.error("Bulk deletion Failed");
+				// 対象タイプのドキュメントを全削除
+				QueryBuilder qb = QueryBuilders.matchAllQuery();
+				SearchResponse scrollRes = esClient.prepareSearch(index)
+						.setTypes(type)
+						.setQuery(qb)
+						.addFields("_id")
+						.setScroll(new TimeValue(60000))
+						.setSize(1000).execute().actionGet();
+
+				BulkRequestBuilder bulkRequest = esClient.prepareBulk();
+				while (true) {
+					for (SearchHit hit : scrollRes.getHits().getHits()) {
+						// Handle the hit...
+						if ((++delcount % 5000) == 0) {
+							logger.debug("deleting " + index + "/" + type + "(" + delcount + ")");
+						}
+						bulkRequest.add(esClient.prepareDelete(index, type, hit.getId()));
+					}
+					scrollRes = esClient.prepareSearchScroll(scrollRes.getScrollId())
+									.setScroll(new TimeValue(6000000))
+									.execute().actionGet();
+
+					// Break condition: No hits are returned
+					if (scrollRes.getHits().getHits().length == 0) {
+						break;
+					}
 				}
-				// TODO 本来ならマッピングを初期化すべき？
-				//esClient.admin().indices().putMapping()
+
+				if (bulkRequest.numberOfActions() > 0) {
+					BulkResponse bulkResponse = bulkRequest.execute().actionGet();
+					if (bulkResponse.hasFailures()) {
+						// process failures by iterating through each bulk response item
+						logger.error("Bulk deletion Failed");
+					}
+					// TODO 本来ならマッピングを初期化すべき？
+					//esClient.admin().indices().putMapping()
+				}
+				retry--;
 			}
+		} finally {
 			logger.info("index type deleted. [" + index + "/" + type + "] " +  delcount);
 			append(Boolean.TRUE);
-		} finally {
-			// do nothing.
+
+			// index refresh.
+			EsUtils.refreshIndex(esClient, index);
 		}
 	}
 }

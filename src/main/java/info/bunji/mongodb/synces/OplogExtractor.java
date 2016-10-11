@@ -23,7 +23,6 @@ import org.bson.types.BSONTimestamp;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.google.gson.Gson;
 import com.mongodb.CursorType;
 import com.mongodb.MongoClient;
 import com.mongodb.MongoInterruptedException;
@@ -34,6 +33,7 @@ import com.mongodb.client.MongoDatabase;
 import com.mongodb.client.model.Filters;
 
 import info.bunji.asyncutil.AsyncProcess;
+import info.bunji.mongodb.synces.util.DocumentUtils;
 
 /**
  ************************************************
@@ -48,8 +48,7 @@ public class OplogExtractor extends AsyncProcess<MongoOperation> {
 
 	private SyncConfig config;
 	private BSONTimestamp timestamp;
-
-	private static final long LOGGING_INTERVAL = 5000;
+	private MongoDatabase targetDb = null;
 
 	/**
 	 ********************************************
@@ -72,84 +71,85 @@ public class OplogExtractor extends AsyncProcess<MongoOperation> {
 	@Override
 	protected void execute() throws Exception {
 
-		Gson gson = new Gson();
-
 		Set<String> includeFields = config.getIncludeFields();
 		Set<String> excludeFields = config.getExcludeFields();
 		String index = config.getIndexName();
 
-// test error
-//config.getMongoConnection().getServerList().get(0).setPort(27118);
+		// oplogからの取得処理
+		int retryCnt = 0;
+		while (true) {
+			try (MongoClient client = MongoClientService.getClient(config)) {
+				retryCnt = 0;
 
-		// 初期インポート処理
-int retryCnt = 0;
-while (true) {
-		try (MongoClient client = MongoClientService.getClient(config)) {
-			retryCnt = 0;
+				logger.debug("[" + config.getSyncName() + "] start oplog sync.");
 
-			logger.info("■ start oplog sync.");
+				// oplogを継続的に取得
+				MongoCollection<Document> oplogCollection = client.getDatabase("local").getCollection("oplog.rs");
+				targetDb = client.getDatabase(config.getMongoDbName());
+				FindIterable<Document> results = oplogCollection
+								.find(Filters.gte("ts", timestamp))
+								.cursorType(CursorType.TailableAwait)
+								.noCursorTimeout(true)
+								.oplogReplay(true);
 
-			// oplogを継続的に取得
-			MongoCollection<Document> oplogCollection = client.getDatabase("local").getCollection("oplog.rs");
-			MongoDatabase targetDb = client.getDatabase(config.getMongoDbName());
-			FindIterable<Document> results = oplogCollection
-							.find(Filters.gte("ts", timestamp))
-							.cursorType(CursorType.TailableAwait)
-							.noCursorTimeout(true)
-							.oplogReplay(true);
+				// get document from oplog
+				for (Document doc : results) {
 
-			// get document from oplog
-			for (Document doc : results) {
-
-				// 同期対象のコレクションかチェックする
-				String collection = getCollectionName(doc);
-				if (!config.isTargetCollection(collection)) {
-					continue;
-				}
-
-				Operation operation = Operation.valueOf(doc.get("op"));
-
-				// TODO:ここでドキュメント内の項目のフィルタが必要
-//				Document filteredDoc = DocumentUtils.applyFieldFilter(doc, includeFields, excludeFields);
-				if (operation == Operation.INSERT) {
-					append(new MongoOperation(operation, index, collection, (Document) doc.get("o"), doc.get("ts")));
-				} else if (operation == Operation.DELETE) {
-					append(new MongoOperation(operation, index, collection, (Document) doc.get("o"), doc.get("ts")));
-				} else if (operation == Operation.UPDATE) {
-					String namespace = getCollectionName(doc);
-					MongoCollection<Document> extractCollection = targetDb.getCollection(namespace);
-
-					// update時は差分データとなるのでidからドキュメントを取得する
-					Document updateDoc = extractCollection.find((Document) doc.get("o2")).first();
-					if (null != updateDoc) {
-						//logger.trace(updateDoc.toString());
-						append(new MongoOperation(operation, index, namespace, updateDoc, doc.get("ts")));
+					// 同期対象のコレクションかチェックする
+					String collection = getCollectionName(doc);
+					if (!config.isTargetCollection(collection)) {
+						continue;
 					}
-				} else if (operation == Operation.DROP_COLLECTION) {
-					// type(コレクション)のデータを全件削除
-					//logger.debug("drop collection [" + collection + "]");
-					append(new MongoOperation(Operation.DROP_COLLECTION, index, collection, null, null));
-				} else {
-					// 未対応の処理
-					logger.debug("unsupported Operation [" + doc + "]");
-				}
-			}
-		} catch (MongoInterruptedException mie) {
-			// interrupt oplog tailable process.
-			break;
-		} catch (MongoSocketException mse) {
-			retryCnt++;
-			if (retryCnt >= 10) {
-				logger.error("mongo connect failed. (cnt=" + retryCnt  + ")", mse);
-				throw mse;
-			}
-			logger.warn("mongo connect retry. (cnt=" + retryCnt  + ")");
-		} catch (Throwable t) {
-			logger.error(t.getMessage(), t);
-			throw t;
-		}
-}
 
+					Operation operation = Operation.valueOf(doc.get("op"));
+
+					BsonTimestamp ts = doc.get("ts", BsonTimestamp.class);
+					if (operation == Operation.INSERT) {
+						Document filteredDoc = DocumentUtils.applyFieldFilter(doc.get("o", Document.class), includeFields, excludeFields);
+						append(new MongoOperation(operation, index, collection, filteredDoc, ts));
+					} else if (operation == Operation.DELETE) {
+						append(new MongoOperation(operation, index, collection, doc.get("o", Document.class), ts));
+					} else if (operation == Operation.UPDATE) {
+						// update時は差分データとなるのでidからドキュメントを取得する
+						String namespace = getCollectionName(doc);
+						MongoCollection<Document> extractCollection = targetDb.getCollection(namespace);
+						Document updateDoc = extractCollection.find(doc.get("o2", Document.class)).first();
+						if (null != updateDoc) {
+							Document filteredDoc = DocumentUtils.applyFieldFilter(updateDoc, includeFields, excludeFields);
+							append(new MongoOperation(operation, index, namespace, filteredDoc, ts));
+						}
+
+					} else if (operation == Operation.DROP_COLLECTION) {
+						// type(コレクション)のデータを全件削除
+						//logger.debug("drop collection [" + collection + "]");
+						append(new MongoOperation(Operation.DROP_COLLECTION, index, collection, null, null));
+					} else {
+						// 未対応の処理
+						logger.debug("unsupported Operation [{}]", operation);
+					}
+				}
+			} catch (MongoInterruptedException mie) {
+				// interrupt oplog tailable process.
+				break;
+			} catch (MongoSocketException mse) {
+				retryCnt++;
+				if (retryCnt >= 10) {
+					logger.error("mongo connect failed. (cnt=" + retryCnt  + ")", mse);
+					throw mse;
+				}
+				logger.warn("mongo connect retry. (cnt=" + retryCnt  + ")");
+			} catch (Throwable t) {
+				logger.error(t.getMessage(), t);
+				throw t;
+			}
+		}
+	}
+
+
+	private Document getUpdateDocument(String collection, Document idDoc) {
+		String namespace = getCollectionName(idDoc);
+		MongoCollection<Document> extractCollection = targetDb.getCollection(collection);
+		return extractCollection.find((Document) idDoc.get("o2")).first();
 	}
 
 	/**
@@ -163,13 +163,15 @@ while (true) {
 		// 対象のDB名以降の文字列が対象
 		// 暫定で最初のピリオド以降
 		String namespace = oplogDoc.getString("ns");
+		if (!namespace.startsWith(config.getMongoDbName())) {
+			return null;
+		}
 		String collection = namespace.substring(namespace.indexOf(".") + 1);
 		if (collection.equals("$cmd")) {
 			Document op = oplogDoc.get("o", Document.class);
 			collection = op.getString("drop");
 
 			if (collection != null) {
-//				logger.debug("drop collection [" + collection + "]");
 				// TODO 別の箇所でやるべき?
 				oplogDoc.put("op", Operation.DROP_COLLECTION.getValue());
 			}

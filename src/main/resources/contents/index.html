@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <title>MongoDB Sync for ElasticSearch</title>
 <link rel="stylesheet" href="css/bootstrap.min.css">
+<link rel="stylesheet" href="css/app.css">
 <script type="text/javascript" src="js/angular.min.js"></script>
 <script type="text/javascript" src="js/angular-resource.min.js"></script>
 <script type="text/javascript" src="js/ui-bootstrap-tpls-2.1.3.min.js"></script>
@@ -11,21 +12,24 @@
 <script>
 var app = angular.module('mongoSyncApp', ['ngResource', 'ui.bootstrap']);
 
-app.constant('appSettings', {
-	defaultRefresh: 5000
-});
-
-app.controller('MainCtrl', function ($log, $scope, $resource, $timeout, appSettings) {
+app.controller('MainCtrl', function ($log, $scope, $resource, $http, $interval) {
 	var syncConfigs = $resource('/api/configs/:action/:id', {id:'@id'},
 		{
-			list: {method:'GET', params: {action: 'list'}},
-			start: {method:'POST', params: {action: 'start'}},
-			stop: {method:'POST', params: {action: 'stop'}},
-			delete: {method:'POST', params: {action: 'delete'}}
+			list:   {method:'GET',    params: {action: 'list'}},
+			start:  {method:'POST',   params: {action: 'start'}},
+			stop:   {method:'POST',   params: {action: 'stop'}},
+			delete: {method:'DELETE', params: {action: 'delete'}},
+			resync: {method:'PUT',    params: {action: 'resync'}}
 		}
 	);
 
+	$scope.logs = [];
 	$scope.configs = [];
+	$scope.autoReload = false;
+	$scope.statusReloadPromise = null;
+	$scope.logReloadPromise = null;
+	$scope.isLoading = false;
+	$scope.refreshInterval = "";
 
 	$scope.list = function() {
 		syncConfigs.list(function(data) {
@@ -39,25 +43,67 @@ app.controller('MainCtrl', function ($log, $scope, $resource, $timeout, appSetti
 	$scope.start = function(name) {
 		console.log('start: ' + name);
 		syncConfigs.start({'id': name}, function(river, response) {
-			console.log(river);
-			console.log(response);
-			$scope.list();
+			$scope.reload();
 		});
 	};
 
 	$scope.stop = function(name) {
 		console.log('stop: ' + name);
 		syncConfigs.stop({'id': name}, function() {
-			$scope.list();
+			$scope.reload();
 		});
 	};
 
 	$scope.delete = function(name) {
 		$log.log('delete: ' + name);
 		syncConfigs.delete({'id': name}, function() {
-			$scope.list();
+			$scope.reload();
 		});
 	};
+
+	$scope.resync = function(name) {
+		$log.log('resync: ' + name);
+		syncConfigs.resync({'id': name}, function() {
+			$scope.reload();
+		});
+	};
+
+	/**
+	 **********************************
+	 **********************************
+	 */
+	$scope.getLog = function() {
+//		$scope.isLoading = true;
+		return $http({
+			method: "GET",
+			url: '/api/log',
+			cache: false
+		}).then(function(res) {
+			$scope.logs = res.data.results;
+		}).finally(function() {
+//			$scope.isLoading = false;
+		});
+	}
+
+	$scope.reload = function() {
+		$scope.isLoading = true;
+		$scope.list();
+		$scope.getLog();
+		$scope.isLoading = false;
+	}
+
+	$scope.setReload = function(interval) {
+		if ($scope.statusReloadPromise != null) {
+			$interval.cancel($scope.statusReloadPromise);
+			$scope.statusReloadPromise = null;
+			$scope.refreshInterval = "";
+		}
+		if (interval != 0) {
+			$scope.statusReloadPromise = $interval(function() { $scope.reload(); }, interval);
+			$scope.refreshInterval = "(" + (interval / 1000) + "sec)";
+			$scope.reload();
+		}
+	}
 
 	$scope.toString = function(object) {
 		var value = JSON.stringify(angular.copy(object), undefined, 2);
@@ -65,6 +111,7 @@ app.controller('MainCtrl', function ($log, $scope, $resource, $timeout, appSetti
 	};
 
 	$scope.list();
+	$scope.getLog();
 });
 </script>
 </head>
@@ -72,43 +119,93 @@ app.controller('MainCtrl', function ($log, $scope, $resource, $timeout, appSetti
 	<div x-ng-controller="MainCtrl" class="container">
 		<div class="row">
 			<div class="col-md-12">
-				<div>
+				<div class="row">
     			    <h3>MongoDB Sync Administration</h3>
-<!--
-        <span class="btn btn-small pull-right" x-ng-class="{ 'btn-info': refresh.enabled, 'btn-warning': !refresh.enabled }"
-          x-ng-click="updateTimer(refresh.enabled)">{{ refresh.label }}</span>
-        <span class="btn btn-small pull-right" x-ng-class="{ 'btn-info': next.enabled, 'btn-default disabled': !next.enabled }"
-          x-ng-click="nextPage()" style="margin-right: 10px;">{{ next.label }}</span>
-        <span class="btn btn-small pull-right" x-ng-class="{ 'btn-info': prev.enabled, 'btn-default disabled': !prev.enabled }"
-          x-ng-click="prevPage()" style="margin-right: 10px;">{{ prev.label }}</span>
--->
+    			    <hr>
 				</div>
 
-				<div x-ng-repeat="(syncName, config) in configs">
-					<div class="panel panel-info">
-						<div class="panel-heading">
-							<span class="h4">{{ syncName }}</span>
-							　<span class="panel-title" x-ng-switch="config.status">
-								<span x-ng-switch-when="RUNNING" class="label label-success">{{config.status}}</span>
-								<span x-ng-switch-when="INITIAL_IMPORTING" class="label label-success">{{config.status}}</span>
-								<span x-ng-switch-when="STOPPED" class="label label-warning">{{config.status}}</span>
-								<span x-ng-switch-default class="label label-danger">{{config.status}}</span>
-							</span>
-							　<span class="glyphicon glyphicon-time"></span> Last Replicated : <b>{{ config.lastTimestamp ? (config.lastTimestamp | date:'yyyy-MM-dd HH:mm:ss Z') : 'never' }}</b>
-							　<span class="glyphicon glyphicon-save"></span> Documents Indexed : <b>{{ config.indexCnt }}</b>
-							<button type="button" class="btn btn-default btn-sm pull-right" x-ng-click="config['isCollapsed'] = !config['isCollapsed']">Toggle setting</button>
-						</div>
-						<div class="panel-body">
-							<div x-uib-collapse="config['isCollapsed']">
-								<div><pre>{{ toString(config.config) }}</pre></div>
-								<hr/>
-							</div>
-							<span x-ng-if="config.status == 'RUNNING' || config.status == 'INITIIAL_IMPORTING'" class="btn btn-sm btn-danger" x-ng-click="stop(syncName)">Stop</span>
-							<span x-ng-if="config.status != 'RUNNING' && config.status == 'INITIIAL_IMPORTING'" class="btn btn-sm btn-success" x-ng-click="start(syncName)">Start</span>
-							<span x-ng-if="config.status != 'RUNNING' && config.status == 'INITIIAL_IMPORTING'" class="btn btn-sm btn-danger pull-right" x-ng-click="delete(syncName)">Delete</span>
-						</div>
-					</div>
+				<!-- refresh button -->
+			    <div class="btn-group pull-right" x-uib-dropdown>
+					<button id="split-button" type="button" class="btn btn-sm btn-primary" x-ng-click="reload();">
+						Refresh {{ refreshInterval }} <i class="glyphicon glyphicon-refresh glyphicon-refresh-animate" x-ng-show="isLoading"></i>
+					</button>
+					<button type="button" class="btn btn-sm btn-primary" x-uib-dropdown-toggle>
+						<span class="caret"></span>
+						<span class="sr-only">Split button!</span>
+					</button>
+					<ul class="dropdown-menu" x-uib-dropdown-menu role="menu" aria-labelledby="split-button">
+						<li role="menuitem"><a href="" x-ng-click="setReload(0)">Manual Refresh</a></li>
+						<li role="menuitem"><a href="" x-ng-click="setReload(2000)">Refresh every 2 seconds</a></li>
+						<li role="menuitem"><a href="" x-ng-click="setReload(5000)">Refresh every 5 seconds</a></li>
+						<li role="menuitem"><a href="" x-ng-click="setReload(10000)">Refresh every 10 seconds</a></li>
+						<li role="menuitem"><a href="" x-ng-click="setReload(30000)">Refresh every 30 seconds</a></li>
+					</ul>
 				</div>
+
+				<uib-tabset>
+					<uib-tab>
+						<uib-tab-heading>
+							<b><i class="glyphicon glyphicon-wrench"></i> Sync Settings</b>
+						</uib-tab-heading>
+
+						<br>
+						<div x-ng-repeat="(syncName, config) in configs">
+							<div class="panel panel-info">
+								<div class="panel-heading">
+									<span class="h4">{{ syncName }}</span>
+									　<span class="panel-title" x-ng-switch="config.status">
+										<span x-ng-switch-when="RUNNING" class="label label-success">{{config.status}}</span>
+										<span x-ng-switch-when="INITIAL_IMPORTING" class="label label-success">{{config.status}}</span>
+										<span x-ng-switch-when="STOPPED" class="label label-warning">{{config.status}}</span>
+										<span x-ng-switch-default class="label label-danger">{{config.status}}</span>
+									</span>
+									　<i class="glyphicon glyphicon-time"></i> Last Replicated : <b>{{ config.lastTimestamp ? (config.lastTimestamp | date:'yyyy-MM-dd HH:mm:ss Z') : 'never' }}</b>
+									　<i class="glyphicon glyphicon-file"></i> Documents Indexed : <b>{{ config.indexCnt }}</b>
+									<button type="button" class="btn btn-xs btn-default pull-right" x-ng-click="config['isCollapsed'] = !config['isCollapsed']">Toggle setting</button>
+								</div>
+								<div class="panel-body">
+									<div x-uib-collapse="config['isCollapsed']">
+										<div><pre>{{ toString(config.config) }}</pre></div>
+										<hr/>
+									</div>
+									<span x-ng-if="config.status != 'RUNNING' && config.status != 'INITIAL_IMPORTING'" class="btn btn-sm btn-success" x-ng-click="start(syncName)">Start</span>
+									<span x-ng-if="config.status == 'RUNNING' || config.status == 'INITIAL_IMPORTING'" class="btn btn-sm btn-danger" x-ng-click="stop(syncName)">Stop</span>
+									<span x-ng-if="config.status != 'RUNNING' && config.status != 'INITIAL_IMPORTING'" class="btn btn-sm btn-danger pull-right" x-ng-click="delete(syncName)">Delete</span>
+<span x-ng-if="config.status != 'RUNNING' && config.status != 'INITIAL_IMPORTING'" class="btn btn-sm btn-danger pull-right" x-ng-click="resync(syncName)">ReSync</span>
+								</div>
+							</div>
+						</div>
+					</uib-tab>
+
+					<uib-tab>
+						<uib-tab-heading>
+							<b><i class="glyphicon glyphicon-th-list"></i> Last Log</b>
+						</uib-tab-heading>
+						<br>
+	  					<table class="table table-condensed _table-striped _table-bordered">
+							<thead class="bg-info">
+								<tr>
+<!--
+									<th class="text-center" style="width:1px;">No.</th>
+-->
+									<th class="text-center" style="width:1px;">time</th>
+									<th class="text-center" style="width:1px;">level</th>
+									<th class="text-center">message</th>
+								</tr>
+							</thead>
+							<tbody>
+								<tr x-ng-repeat="line in logs" x-ng-class="{'danger' : line.level == 'ERROR', 'warning' : line.level == 'WARN'}">
+<!--
+									<td class="text-right text-nowrap">{{ $index + 1 }}</td>
+-->
+		  							<td class="text-right text-nowrap">{{ line.timestamp | date: 'yyyy/MM/dd HH:mm:ss.sss' }}</td>
+									<td class="text-nowrap">{{ line.level }}</td>
+									<td style="word-break:break-all">{{ line.message }}</td>
+								</tr>
+							</tbody>
+						</table>
+					</uib-tab>
+				</uib-tabset>
 			</div>
 		</div>
 	</div>

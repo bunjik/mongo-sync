@@ -21,6 +21,9 @@ import java.util.List;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import com.mongodb.MongoClient;
 import com.mongodb.MongoClientOptions;
 import com.mongodb.MongoCredential;
@@ -33,7 +36,9 @@ import info.bunji.mongodb.synces.MongoClientService.ClientCacheKey;
  * @author Fumiharu Kinoshita
  */
 class MongoCachedClient extends MongoClient {
-	/**  */
+
+	private Logger logger = LoggerFactory.getLogger(getClass());
+
 	private final AtomicInteger refCount = new AtomicInteger(0);
 
 	private final ClientCacheKey cacheKey;
@@ -90,9 +95,10 @@ class MongoCachedClient extends MongoClient {
 	 */
 	@Override
 	public void close() {
-		if (refCount.decrementAndGet() == 0) {
+		if (refCount.decrementAndGet() <= 0) {
 			// 参照数が0になったらcloseする
-			super.close();
+			logger.trace("closing real mongoClient");
+			forceClose();
 			for (Listener listener : listeners) {
 				listener.onCloseClient(cacheKey);
 			}

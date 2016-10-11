@@ -10,10 +10,10 @@
   </appender>
 
   <logger name="chapters.configuration" level="WARN"/>
-
-  <logger name="org.elasticsearch.river.mongodb" level="TRACE"/>
+  <logger name="ch.logback" level="WARN"/>
+  <logger name="org.elasticsearch" level="WARN"/>
+  <logger name="info.bunji.asyncutil" level="INFO"/>
   <logger name="info.bunji.mongodb" level="TRACE"/>
-  <logger name="info.bunji.asyncutil" level="debug"/>
 
   <root level="info">
     <appender-ref ref="STDOUT" />

@@ -38,6 +38,7 @@ import org.slf4j.LoggerFactory;
 import info.bunji.asyncutil.AsyncExecutor;
 import info.bunji.asyncutil.AsyncResult;
 import info.bunji.mongodb.synces.rest.SyncConfigServlet;
+import info.bunji.mongodb.synces.rest.SyncLogServlet;
 
 /**
  *
@@ -92,9 +93,36 @@ public class MongoEsSync {
 				.addTransportAddress(new InetSocketTransportAddress(
 									InetAddress.getByName(prop.getProperty("es.host")),
 									Integer.valueOf(prop.getProperty("es.port"))));
+		StatusCheckProcess process = new StatusCheckProcess(esClient, CHECK_INTERVAL);
+
+		// ポート番号は後で外部化
+		Server server = new Server(1234);
+
+		// static contents
+		ResourceHandler rh = new ResourceHandler();
+		rh.setBaseResource(Resource.newClassPathResource("contents"));
+		ContextHandler staticContext = new ContextHandler();
+		staticContext.setContextPath("/");
+		staticContext.setHandler(rh);
+
+		// api
+		ServletContextHandler apiContext = new ServletContextHandler(server, "/api");
+		apiContext.addServlet(new ServletHolder(new SyncConfigServlet(process)), "/configs/*");
+		apiContext.addServlet(new ServletHolder(new SyncLogServlet()), "/log");
+
+		ContextHandlerCollection handlers = new ContextHandlerCollection();
+		handlers.addHandler(staticContext);
+		handlers.addHandler(apiContext);
+		server.setHandler(handlers);
+
+		try {
+			server.start();
+		} catch (Exception e) {
+			logger.error(e.getMessage(), e);
+			System.exit(1);
+		}
 
 		// 監視スレッドの起動
-		StatusCheckProcess process = new StatusCheckProcess(esClient, CHECK_INTERVAL);
 		final AsyncResult<Boolean> checker = AsyncExecutor.execute(process);
 
         // shutdown hook
@@ -111,26 +139,6 @@ public class MongoEsSync {
 			}
 		});
 
-		// ポート番号は後で外部化
-		Server server = new Server(1234);
-
-		// static contents
-		ResourceHandler rh = new ResourceHandler();
-		rh.setBaseResource(Resource.newClassPathResource("contents"));
-		ContextHandler staticContext = new ContextHandler();
-		staticContext.setContextPath("/");
-		staticContext.setHandler(rh);
-
-		// api
-		ServletContextHandler apiContext = new ServletContextHandler(server, "/api");
-		apiContext.addServlet(new ServletHolder(new SyncConfigServlet(process)), "/configs/*");
-
-		ContextHandlerCollection handlers = new ContextHandlerCollection();
-		handlers.addHandler(staticContext);
-		handlers.addHandler(apiContext);
-		server.setHandler(handlers);
-
-		server.start();
 		server.join();
 	}
 }

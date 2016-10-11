@@ -7,9 +7,14 @@ import java.util.Arrays;
 import java.util.HashSet;
 import java.util.Set;
 
+import org.bson.BsonTimestamp;
 import org.bson.Document;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import com.mongodb.DBObject;
+
+import info.bunji.mongodb.synces.Status;
 
 /**
  ************************************************
@@ -19,21 +24,33 @@ import com.mongodb.DBObject;
  */
 public class DocumentUtils {
 
+	private Logger logger = LoggerFactory.getLogger(DocumentUtils.class);
+
 	private DocumentUtils() {
 		// do nothing.
 	}
 
+	public static Document fromJson(String json) {
+		return Document.parse(json);
+	}
+
+	public static Document makeStatusDocument(Status status, Long indexCnt, BsonTimestamp ts) {
+		return fromJson(EsUtils.makeStatusJson(status, indexCnt, ts));
+	}
+
 	/**
+	 ********************************************
 	 *
-	 * @param object
+	 * @param orgDoc
 	 * @param includeFields
 	 * @param excludeFields
 	 * @return
+	 ********************************************
 	 */
-	public static Document applyFieldFilter(Document object, final Set<String> includeFields, final Set<String> excludeFields) {
-		object = applyExcludeFields(object, excludeFields);
-		object = applyIncludeFields(object, includeFields);
-		return object;
+	public static Document applyFieldFilter(Document orgDoc, final Set<String> includeFields, final Set<String> excludeFields) {
+		Document filterdDoc = applyExcludeFields(orgDoc, excludeFields);
+		filterdDoc = applyIncludeFields(orgDoc, includeFields);
+		return filterdDoc;
     }
 
 	/**

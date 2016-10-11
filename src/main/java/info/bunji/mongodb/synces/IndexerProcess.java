@@ -21,11 +21,11 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 
 import org.bson.BsonTimestamp;
+import org.elasticsearch.action.bulk.BulkItemResponse;
 import org.elasticsearch.action.bulk.BulkProcessor;
 import org.elasticsearch.action.bulk.BulkRequest;
 import org.elasticsearch.action.bulk.BulkResponse;
 import org.elasticsearch.action.delete.DeleteRequest;
-import org.elasticsearch.action.index.IndexRequest;
 import org.elasticsearch.action.update.UpdateRequest;
 import org.elasticsearch.client.Client;
 import org.elasticsearch.common.unit.ByteSizeUnit;
@@ -60,7 +60,6 @@ public class IndexerProcess extends AsyncProcess<Boolean>
 	private final Listener listener;
 
 	private BsonTimestamp oplogTs;
-	private long indexCnt;
 
 	private static final int DEFAULT_BUlK_ACTIONS = 5000;
 
@@ -92,7 +91,7 @@ public class IndexerProcess extends AsyncProcess<Boolean>
 	 */
 	@Override
 	public void execute() {
-		logger.info("■ start sync [" + config.getSyncName() + "]");
+		logger.info("[{}] start sync.", config.getSyncName());
 		BulkProcessor processor = getBulkProcessor();
 		try {
 			for (MongoOperation op : operations) {
@@ -100,7 +99,6 @@ public class IndexerProcess extends AsyncProcess<Boolean>
 				oplogTs = op.getTimestamp();
 
 				// TODO:同期対象外が続いた場合は、一定件数毎にステータスを更新したほうが良いかも？
-
 				if (!config.isTargetCollection(op.getCollection()) && !SyncConfig.STATUS_INDEX.equals(op.getIndex())) {
 					// 同期対象外
 					continue;
@@ -111,13 +109,13 @@ public class IndexerProcess extends AsyncProcess<Boolean>
 				// ドキュメント追加/更新時
 				case INSERT:
 				case UPDATE:
-					indexCnt = config.addSyncCount();
+					config.addSyncCount();
 					processor.add(makeIndexRequest(op));
 					break;
 
 				// ドキュメント削除時
 				case DELETE:
-					indexCnt = config.addSyncCount();
+					config.addSyncCount();
 					processor.add(makeDeleteRequest(op));
 					break;
 
@@ -127,7 +125,7 @@ public class IndexerProcess extends AsyncProcess<Boolean>
 					// 削除処理はoplogとの不整合を防ぐため、同期で実行する
 					logger.info(op.getOp() + " index:" + indexName + " type:" + op.getCollection());
 					AsyncExecutor.execute(new EsTypeDeleter(esClient, indexName, op.getCollection())).block();
-					logger.debug("type deleted.[, op.getCollection()]");
+					logger.debug("type deleted.[{}]", op.getCollection());
 
 					// ステータス更新用のリクエストを追加する
 					processor.add(EsUtils.makeStatusRequest(config, null, oplogTs));
@@ -135,18 +133,18 @@ public class IndexerProcess extends AsyncProcess<Boolean>
 
 				// データベース削除
 				case DROP_DATABASE:
-					logger.debug("not implemented yet. " + op.getOp());
+					logger.debug("not implemented yet. [{}]", op.getOp());
 					break;
 
 				// 未対応もしくは不明な操作
 				default:
-					logger.warn("unsupported operation. " + op.getOp());
+					logger.warn("unsupported operation. [{}]", op.getOp());
 					break;
 				}
 			}
 		} catch (Throwable t) {
-			processor.add(EsUtils.makeStatusRequest(config, "STOPPED", null));
-			logger.error("indexer stopped. [" + config.getSyncName() + "]", t);
+			processor.add(EsUtils.makeStatusRequest(config, Status.STOPPED, null));
+			logger.error("[{}] indexer stopped.", config.getSyncName(), t);
 			throw t;
 		} finally {
 			try {
@@ -157,8 +155,7 @@ public class IndexerProcess extends AsyncProcess<Boolean>
 			try {
 				processor.flush();
 				processor.awaitClose(10, TimeUnit.SECONDS);
-				//logger.debug("bulk processer flushed.");
-				logger.info("■stop sync [" + config.getSyncName() + "]");
+				logger.info("[{}] stop sync.", config.getSyncName());
 
 				if (listener != null) {
 					// 終了の通知
@@ -167,7 +164,7 @@ public class IndexerProcess extends AsyncProcess<Boolean>
 			} catch (InterruptedException e) {
 				e.printStackTrace();
 			}
-			latch.countDown();
+//			latch.countDown();
 		}
 	}
 
@@ -183,15 +180,7 @@ public class IndexerProcess extends AsyncProcess<Boolean>
 	 ********************************************
 	 */
 	private UpdateRequest makeIndexRequest(MongoOperation op) {
-		String json = op.getJson();
-		IndexRequest insert = new IndexRequest(op.getIndex())
-								.type(op.getCollection())
-								.id(op.getId())
-								.source(json);
-		UpdateRequest update = new UpdateRequest(insert.index(), insert.type(), insert.id())
-								.doc(json)
-								.upsert(insert);
-		return update;
+		return EsUtils.makeIndexRequest(op.getIndex(), op.getCollection(), op.getId(), op.getJson());
 	}
 
 	/**
@@ -202,10 +191,9 @@ public class IndexerProcess extends AsyncProcess<Boolean>
 	 ********************************************
 	 */
 	private DeleteRequest makeDeleteRequest(MongoOperation op) {
-		DeleteRequest request = new DeleteRequest(op.getIndex())
+		return new DeleteRequest(op.getIndex())
 								.type(op.getCollection())
 								.id(op.getId());
-		return request;
 	}
 
 	/**
@@ -219,11 +207,11 @@ public class IndexerProcess extends AsyncProcess<Boolean>
 	 */
 	private BulkProcessor getBulkProcessor() {
 		return BulkProcessor.builder(esClient, this)
-					.setBulkActions(DEFAULT_BUlK_ACTIONS)
-					.setBulkSize(new ByteSizeValue(DEFAULT_BULK_SIZE, ByteSizeUnit.MB))
-					.setFlushInterval(TimeValue.timeValueMillis(DEFAULT_BUlK_INTERVAL))
-					.setConcurrentRequests(1)
-					.build();
+							.setBulkActions(DEFAULT_BUlK_ACTIONS)
+							.setBulkSize(new ByteSizeValue(DEFAULT_BULK_SIZE, ByteSizeUnit.MB))
+							.setFlushInterval(TimeValue.timeValueMillis(DEFAULT_BUlK_INTERVAL))
+							.setConcurrentRequests(1)
+							.build();
 	}
 
 	/**
@@ -234,10 +222,9 @@ public class IndexerProcess extends AsyncProcess<Boolean>
 	 */
 	@Override
 	public void beforeBulk(long executionId, BulkRequest request) {
-		if (oplogTs != null) {
-			// ステータス更新用のリクエストを追加する
-			request.add(EsUtils.makeStatusRequest(config, null, oplogTs));
-		}
+		// ステータス更新用のリクエストを追加する
+		request.add(EsUtils.makeStatusRequest(config, null, oplogTs));
+
 		//logger.debug("call beforeBulk() size=" + request.numberOfActions() + " ts=" + curTs);
 	}
 
@@ -254,24 +241,34 @@ public class IndexerProcess extends AsyncProcess<Boolean>
 
 	/**
 	 ********************************************
-	 * バルク処理の終了時(エラーなし)に呼び出される.
+	 * バルク処理の終了時に呼び出される.
 	 *
 	 * @see org.elasticsearch.action.bulk.BulkProcessor.Listener#afterBulk(long, org.elasticsearch.action.bulk.BulkRequest, org.elasticsearch.action.bulk.BulkResponse)
 	 ********************************************
 	 */
 	@Override
 	public void afterBulk(long executionId, BulkRequest request, BulkResponse response) {
-		logger.trace(String.format("call afterBulk() size=%d, [%dms]",
-								 response.getItems().length,
-								 response.getTookInMillis()));
-		if (response.hasFailures()) {
-			logger.error(response.buildFailureMessage());
+		logger.trace(String.format("[%s] call afterBulk() size=%d, [%d ms]",
+								config.getSyncName(),
+								response.getItems().length,
+								response.getTookInMillis()));
+		//if (response.hasFailures()) {
+		//	logger.error(response.buildFailureMessage());
+		//}
+		for (BulkItemResponse item : response) {
+			if (item.isFailed()) {
+				logger.error("[{}] index:[{}], type:[{}] id:[{}] msg:[{}]",
+								item.getItemId(), item.getIndex(), item.getType(), item.getId(),
+								item.getFailureMessage());
+			}
 		}
 	}
 
 	/*
+	 ********************************************
 	 * (非 Javadoc)
 	 * @see info.bunji.mongodb.synces.StatusChangeListener#stop()
+	 ********************************************
 	 */
 	@Override
 	public void stop() {

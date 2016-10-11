@@ -50,7 +50,7 @@ public class SyncConfigServlet extends HttpServlet {
 	 */
 	@Override
 	protected void doGet(HttpServletRequest req, HttpServletResponse res) throws ServletException, IOException {
-		logger.debug("call doGet() " + req.getPathInfo());
+		//logger.debug("call doGet() " + req.getPathInfo());
 		try {
 			// パラメータの有無で取得内容を変更する
 			// 指定がなければ全件を返す
@@ -73,20 +73,14 @@ public class SyncConfigServlet extends HttpServlet {
 	 */
 	@Override
 	protected void doPost(HttpServletRequest req, HttpServletResponse res) throws ServletException, IOException {
-		logger.debug("call doPost() " + req.getPathInfo());
 		try {
 			String[] params = req.getPathInfo().split("/");
-			logger.debug("params.length=" + params.length);
-
 			if (params.length == 3) {
 				if (params[1].equals("start")) {
 					process.startIndexer(params[2]);
 					res.setStatus(HttpServletResponse.SC_OK);
 				} else if (params[1].equals("stop")) {
 					process.stopIndexer(params[2]);
-					res.setStatus(HttpServletResponse.SC_OK);
-				} else if (params[1].equals("delete")) {
-					process.deleteIndexer(params[2]);
 					res.setStatus(HttpServletResponse.SC_OK);
 				} else {
 					res.setStatus(HttpServletResponse.SC_BAD_REQUEST);
@@ -105,7 +99,52 @@ public class SyncConfigServlet extends HttpServlet {
 	 */
 	@Override
 	protected void doPut(HttpServletRequest req, HttpServletResponse res) throws ServletException, IOException {
-		logger.debug("call doPut()");
-		doPost(req, res);
+		// TODO 暫定
+		res.setStatus(HttpServletResponse.SC_BAD_REQUEST);
+
+		try {
+			String[] params = req.getPathInfo().split("/");
+			if (params.length == 3) {
+				if (params[1].equals("resync")) {
+					String syncName = params[2];
+
+					// stop indexer
+					process.resyncIndexer(syncName);
+
+					logger.debug("resync started.");
+					res.setStatus(HttpServletResponse.SC_OK);
+				} else {
+					res.setStatus(HttpServletResponse.SC_BAD_REQUEST);
+				}
+			} else {
+				res.setStatus(HttpServletResponse.SC_BAD_REQUEST);
+			}
+		} catch (Exception e) {
+			logger.error(e.getMessage(), e);
+			res.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
+		}
+	}
+
+	/* (非 Javadoc)
+	 * @see javax.servlet.http.HttpServlet#doDelete(javax.servlet.http.HttpServletRequest, javax.servlet.http.HttpServletResponse)
+	 */
+	@Override
+	protected void doDelete(HttpServletRequest req, HttpServletResponse res) throws ServletException, IOException {
+		try {
+			String[] params = req.getPathInfo().split("/");
+			if (params.length == 3) {
+				if (params[1].equals("delete")) {
+					process.deleteIndexer(params[2]);
+					res.setStatus(HttpServletResponse.SC_OK);
+				} else {
+					res.setStatus(HttpServletResponse.SC_BAD_REQUEST);
+				}
+			} else {
+				res.setStatus(HttpServletResponse.SC_BAD_REQUEST);
+			}
+		} catch (Exception e) {
+			logger.error(e.getMessage(), e);
+			res.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
+		}
 	}
 }

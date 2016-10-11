@@ -30,7 +30,6 @@ import org.apache.commons.lang3.builder.ToStringBuilder;
 import org.apache.commons.lang3.builder.ToStringStyle;
 import org.bson.BsonTimestamp;
 import org.elasticsearch.action.WriteConsistencyLevel;
-import org.elasticsearch.action.admin.indices.refresh.RefreshRequest;
 import org.elasticsearch.action.bulk.BulkAction;
 import org.elasticsearch.action.bulk.BulkRequest;
 import org.elasticsearch.action.delete.DeleteRequest;
@@ -80,6 +79,10 @@ public class StatusCheckProcess extends AsyncProcess<Boolean> implements Indexer
 		this.checkInterval = checkInterval;
 	}
 
+	public boolean isRunning(String syncName) {
+		return indexerMap.containsKey(syncName);
+	}
+
 	/**
 	 *
 	 * @return
@@ -109,7 +112,7 @@ public class StatusCheckProcess extends AsyncProcess<Boolean> implements Indexer
 
 			SyncStatus status = tmpStatus.get(entry.getKey());
 			if (status != null) {
-				config.put("status", status.getStatus());
+				config.put("status", status.getStatus().toString());
 				if (status.getLastOpTime() != null) {
 					config.put("lastTimestamp", status.getLastOpTime().getTime() * 1000L);
 				}
@@ -252,7 +255,7 @@ public class StatusCheckProcess extends AsyncProcess<Boolean> implements Indexer
 							} else {
 								// インポート対象のインデックスが存在
 								logger.error("import index already exists.[" + config.getIndexName() + "]");
-								esClient.update(EsUtils.makeStatusRequest(config, Status.START_FAILED.name(), null));
+								esClient.update(EsUtils.makeStatusRequest(config, Status.START_FAILED, null));
 								config.setStatus(Status.INITIAL_IMPORT_FAILED);
 							}
 						}
@@ -260,15 +263,16 @@ public class StatusCheckProcess extends AsyncProcess<Boolean> implements Indexer
 						// config != null && status != null
 						IndexerProcess indexer = indexerMap.get(syncName);
 						SyncStatus statusInfo = tmpStatus.get(syncName);
+						config.addSyncCount(statusInfo.getIndexCnt());
 						if (indexer == null) {
-							if ("RUNNING".equals(statusInfo.getStatus())) {
+							if (Status.RUNNING.equals(statusInfo.getStatus())) {
 								// 起動時の再開
 								extractor = new CollectionExtractor(config, statusInfo.getLastOpTime());
 							}
 						} else {
-							if (!"RUNNING".equals(statusInfo.getStatus())
-								&& !"INITIAL_IMPORT".equals(statusInfo.getStatus())
-								&& !"STARTING".equals(statusInfo.getStatus())) {
+							if (!Status.RUNNING.equals(statusInfo.getStatus())
+								&& !Status.INITIAL_IMPORTING.equals(statusInfo.getStatus())
+								&& !Status.STARTING.equals(statusInfo.getStatus())) {
 								// 実行中処理の停止
 								logger.debug("indexer stopping.[" + syncName + "]");
 								indexer.stop();
@@ -328,51 +332,56 @@ public class StatusCheckProcess extends AsyncProcess<Boolean> implements Indexer
 
 	/**
 	 **********************************
-	 *
+	 * 同期を開始する.
 	 * @param syncName
 	 * @return
 	 **********************************
 	 */
 	public boolean startIndexer(String syncName) {
-		String json = EsUtils.makeStatusJson(Status.RUNNING.toString(), null, null);
+		String json = EsUtils.makeStatusJson(Status.RUNNING, null, null);
 		UpdateRequest req = new UpdateRequest(SyncConfig.STATUS_INDEX, "status", syncName)
 				.doc(json).consistencyLevel(WriteConsistencyLevel.ALL);
 		// ステータス更新
 		esClient.update(req).actionGet();
 		// インデックスのリフレッシュ
-		esClient.admin().indices().refresh(new RefreshRequest(SyncConfig.STATUS_INDEX)).actionGet();
-		logger.debug("start Indexer(" + syncName + ")");
+		EsUtils.refreshIndex(esClient, SyncConfig.STATUS_INDEX);
+		logger.debug("[{}] start Indexer.", syncName);
 		return true;
 	}
 
 	/**
 	 **********************************
-	 *
+	 * 同期を停止する.
 	 * @param syncName
 	 * @return
 	 **********************************
 	 */
 	public boolean stopIndexer(String syncName) {
-		String json = EsUtils.makeStatusJson(Status.STOPPED.toString(), null, null);
+		IndexerProcess indexer = indexerMap.get(syncName);
+		Long count = null;
+		if (indexer != null) {
+			count = indexer.getConfig().getSyncCount();
+		}
+		String json = EsUtils.makeStatusJson(Status.STOPPED, count, null);
 		UpdateRequest req = new UpdateRequest(SyncConfig.STATUS_INDEX, "status", syncName)
 				.doc(json).consistencyLevel(WriteConsistencyLevel.ALL);
 		// ステータス更新
 		esClient.update(req).actionGet();
 		// インデックスのリフレッシュ
-		esClient.admin().indices().refresh(new RefreshRequest(SyncConfig.STATUS_INDEX)).actionGet();
-		logger.debug("stop Indexer(" + syncName + ")");
+		EsUtils.refreshIndex(esClient, SyncConfig.STATUS_INDEX);
+		logger.debug("[{}] stop Indexer.", syncName);
 		return true;
 	}
 
 	/**
 	 **********************************
-	 *
+	 * 同期設定を削除する.
 	 * @param syncName
 	 * @return
 	 **********************************
 	 */
 	public boolean deleteIndexer(String syncName) {
-		// 設定用法の削除
+		// 設定情報の削除
 		BulkRequest bulkReq = BulkAction.INSTANCE.newRequestBuilder(esClient)
 						.add(new DeleteRequest(SyncConfig.STATUS_INDEX).type("config").id(syncName))
 						.add(new DeleteRequest(SyncConfig.STATUS_INDEX).type("status").id(syncName))
@@ -380,10 +389,50 @@ public class StatusCheckProcess extends AsyncProcess<Boolean> implements Indexer
 						.request();
 		esClient.bulk(bulkReq).actionGet();
 		// インデックスのリフレッシュ
-		esClient.admin().indices().refresh(new RefreshRequest(SyncConfig.STATUS_INDEX)).actionGet();
-		logger.debug("delete Indexer(" + syncName + ")");
+		EsUtils.refreshIndex(esClient, SyncConfig.STATUS_INDEX);
+		logger.debug("[{}] delete Indexer.", syncName);
 		return true;
 	}
+
+	/**
+	 *
+	 * @param syncName
+	 * @return
+	 * @throws InterruptedException
+	 */
+	public boolean resyncIndexer(String syncName) throws InterruptedException {
+		Map<String, Object> config = (Map<String, Object>) getConfigs().get(syncName);
+		if (config != null && config.containsKey("config")) {
+			stopIndexer(syncName);
+			while (true) {
+				if (!isRunning(syncName)) break;
+				Thread.sleep(500);
+			}
+
+			// delete index
+			String indexName = ((Map<String, String>) config.get("config")).get("indexName");
+			if (EsUtils.isExistsIndex(esClient, indexName)) {
+				esClient.admin().indices().prepareDelete(indexName)
+								.execute().actionGet();
+			}
+
+			// delete sync status
+			esClient.prepareDelete(SyncConfig.STATUS_INDEX, "status", syncName)
+							.setRefresh(true)
+							.setConsistencyLevel(WriteConsistencyLevel.ALL)
+							.execute()
+							.actionGet();
+			while (true) {
+				if (isRunning(syncName)) break;
+				logger.debug("waiting resync.");
+				Thread.sleep(500);
+			}
+			Thread.sleep(500);
+			Thread.sleep(500);
+		}
+		return true;
+	}
+
 
 	@Override
 	public void onIndexerStop(String syncName) {
@@ -393,7 +442,7 @@ public class StatusCheckProcess extends AsyncProcess<Boolean> implements Indexer
 	/**
 	 *
 	 */
-	static interface Listener  extends EventListener {
+	static interface Listener extends EventListener {
 		void onStop();
 	}
 
@@ -402,13 +451,13 @@ public class StatusCheckProcess extends AsyncProcess<Boolean> implements Indexer
 	 *
 	 ********************************************
 	 */
-	private final class SyncStatus {
-		private String status;
+	private static final class SyncStatus {
+		private Status status;
 		private BsonTimestamp lastOpTime;
 		private long indexCnt;
 
 		public SyncStatus(Map<String, Object> map) {
-			this.status = Objects.toString(map.get("status"), "");
+			this.status = Status.valueOf(Objects.toString(map.get("status"), ""));
 			Map<String, Number> ts = (Map<String, Number>) map.get("lastOpTime");
 			if (ts != null) {
 				int sec = ts.get("seconds").intValue();
@@ -421,7 +470,7 @@ public class StatusCheckProcess extends AsyncProcess<Boolean> implements Indexer
 			}
 		}
 
-		public String getStatus() {
+		public Status getStatus() {
 			return status;
 		}
 
