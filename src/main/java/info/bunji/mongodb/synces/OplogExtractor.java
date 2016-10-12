@@ -42,7 +42,7 @@ import info.bunji.mongodb.synces.util.DocumentUtils;
  * @author Fumiharu Kinoshita
  ************************************************
  */
-public class OplogExtractor extends AsyncProcess<MongoOperation> {
+public class OplogExtractor extends AsyncProcess<SyncOperation> {
 
 	private Logger logger = LoggerFactory.getLogger(getClass());
 
@@ -106,9 +106,9 @@ public class OplogExtractor extends AsyncProcess<MongoOperation> {
 					BsonTimestamp ts = doc.get("ts", BsonTimestamp.class);
 					if (operation == Operation.INSERT) {
 						Document filteredDoc = DocumentUtils.applyFieldFilter(doc.get("o", Document.class), includeFields, excludeFields);
-						append(new MongoOperation(operation, index, collection, filteredDoc, ts));
+						append(new SyncOperation(operation, index, collection, filteredDoc, ts));
 					} else if (operation == Operation.DELETE) {
-						append(new MongoOperation(operation, index, collection, doc.get("o", Document.class), ts));
+						append(new SyncOperation(operation, index, collection, doc.get("o", Document.class), ts));
 					} else if (operation == Operation.UPDATE) {
 						// update時は差分データとなるのでidからドキュメントを取得する
 						String namespace = getCollectionName(doc);
@@ -116,13 +116,13 @@ public class OplogExtractor extends AsyncProcess<MongoOperation> {
 						Document updateDoc = extractCollection.find(doc.get("o2", Document.class)).first();
 						if (null != updateDoc) {
 							Document filteredDoc = DocumentUtils.applyFieldFilter(updateDoc, includeFields, excludeFields);
-							append(new MongoOperation(operation, index, namespace, filteredDoc, ts));
+							append(new SyncOperation(operation, index, namespace, filteredDoc, ts));
 						}
 
 					} else if (operation == Operation.DROP_COLLECTION) {
 						// type(コレクション)のデータを全件削除
 						//logger.debug("drop collection [" + collection + "]");
-						append(new MongoOperation(Operation.DROP_COLLECTION, index, collection, null, null));
+						append(new SyncOperation(Operation.DROP_COLLECTION, index, collection, null, null));
 					} else {
 						// 未対応の処理
 						logger.debug("unsupported Operation [{}]", operation);

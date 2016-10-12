@@ -287,7 +287,7 @@ public class StatusCheckProcess extends AsyncProcess<Boolean> implements Indexer
 						if (tmpStatus.containsKey(syncName)) {
 							ts = tmpStatus.get(syncName).getLastOpTime();
 						}
-						List<AsyncProcess<MongoOperation>> procList = new ArrayList<>();
+						List<AsyncProcess<SyncOperation>> procList = new ArrayList<>();
 						if (ts == null) {
 							procList.add(extractor);
 						}

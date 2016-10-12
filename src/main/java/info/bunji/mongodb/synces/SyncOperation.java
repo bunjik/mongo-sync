@@ -35,9 +35,9 @@ import com.google.gson.JsonSerializer;
  *
  * @author Fumiharu Kinoshita
  */
-public class MongoOperation {
+public class SyncOperation {
 
-	private static final Logger logger = LoggerFactory.getLogger(MongoOperation.class);
+	private static final Logger logger = LoggerFactory.getLogger(SyncOperation.class);
 
 	private final Operation op;
 	private final String index;
@@ -72,7 +72,7 @@ public class MongoOperation {
 		gson = builder.create();
 	}
 
-	public MongoOperation(Operation op, String index, String collection, Document doc, Object ts) {
+	public SyncOperation(Operation op, String index, String collection, Document doc, Object ts) {
 		this.op = op;
 		this.index = index;
 		this.collection = collection;
@@ -88,7 +88,7 @@ public class MongoOperation {
 	 * @param doc
 	 * @param id
 	 */
-	public MongoOperation(Operation op, String collection, Document doc, String id) {
+	public SyncOperation(Operation op, String collection, Document doc, String id) {
 		this.op = op;
 		this.index = SyncConfig.STATUS_INDEX;
 		this.collection = collection;

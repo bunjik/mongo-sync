@@ -43,7 +43,7 @@ import info.bunji.mongodb.synces.util.DocumentUtils;
  * @author Fumiharu Kinoshita
  ************************************************
  */
-public class CollectionExtractor extends AsyncProcess<MongoOperation> {
+public class CollectionExtractor extends AsyncProcess<SyncOperation> {
 
 	private Logger logger = LoggerFactory.getLogger(getClass());
 
@@ -86,7 +86,7 @@ public class CollectionExtractor extends AsyncProcess<MongoOperation> {
 
 				// update status
 				Document statusDoc = DocumentUtils.makeStatusDocument(Status.INITIAL_IMPORTING, null, null);
-				append(new MongoOperation(Operation.INSERT, "status", statusDoc, config.getSyncName()));
+				append(new SyncOperation(Operation.INSERT, "status", statusDoc, config.getSyncName()));
 
 				// 処理開始時点のoplogの最終タイムスタンプを取得しておく
 				MongoCollection<Document> oplog  = client.getDatabase("local").getCollection("oplog.rs");
@@ -112,7 +112,7 @@ public class CollectionExtractor extends AsyncProcess<MongoOperation> {
 					FindIterable<Document> results = conn.find(filter).sort(new BasicDBObject("_id", 1));
 					for (Document doc : results) {
 						Document filteredDoc = DocumentUtils.applyFieldFilter(doc, includeFields, excludeFields);
-						append(new MongoOperation(Operation.INSERT, index, collection, filteredDoc, null));
+						append(new SyncOperation(Operation.INSERT, index, collection, filteredDoc, null));
 //						lastId = doc.get("_id");
 						if ((++processed % LOGGING_INTERVAL) == 0) {
 							logger.info("processing initial import. [{}({}/{})]", collection, processed, count);
@@ -123,7 +123,7 @@ public class CollectionExtractor extends AsyncProcess<MongoOperation> {
 
 				// update status
 				statusDoc = DocumentUtils.makeStatusDocument(Status.RUNNING, null, lastOpTs);
-				append(new MongoOperation(Operation.UPDATE, "status", statusDoc, config.getSyncName()));
+				append(new SyncOperation(Operation.UPDATE, "status", statusDoc, config.getSyncName()));
 			}
 		} catch (Throwable t) {
 			config.setStatus(Status.INITIAL_IMPORT_FAILED);

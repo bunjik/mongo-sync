@@ -41,7 +41,7 @@ public class SyncConfig {
 
 	public static final String ID_FIELD = "_id";
 
-	public static final String STATUS_INDEX = "sync_setting";
+	public static final String STATUS_INDEX = ".mongosync";
 
 	/** 同期設定名 */
 	private String syncName;

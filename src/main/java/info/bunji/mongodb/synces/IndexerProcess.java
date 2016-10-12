@@ -56,7 +56,7 @@ public class IndexerProcess extends AsyncProcess<Boolean>
 	private final Client esClient;
 	private final SyncConfig config;
 	private final String indexName;
-	private AsyncResult<MongoOperation> operations;
+	private AsyncResult<SyncOperation> operations;
 	private final Listener listener;
 
 	private BsonTimestamp oplogTs;
@@ -76,7 +76,7 @@ public class IndexerProcess extends AsyncProcess<Boolean>
 	 * @param operations
 	 **********************************
 	 */
-	IndexerProcess(Client esClient, SyncConfig config, Listener listener, AsyncResult<MongoOperation> operations) {
+	IndexerProcess(Client esClient, SyncConfig config, Listener listener, AsyncResult<SyncOperation> operations) {
 		this.esClient = esClient;
 		this.config = config;
 		this.operations = operations;
@@ -94,7 +94,7 @@ public class IndexerProcess extends AsyncProcess<Boolean>
 		logger.info("[{}] start sync.", config.getSyncName());
 		BulkProcessor processor = getBulkProcessor();
 		try {
-			for (MongoOperation op : operations) {
+			for (SyncOperation op : operations) {
 				// monodbの操作日時を取得
 				oplogTs = op.getTimestamp();
 
@@ -179,7 +179,7 @@ public class IndexerProcess extends AsyncProcess<Boolean>
 	 * @return
 	 ********************************************
 	 */
-	private UpdateRequest makeIndexRequest(MongoOperation op) {
+	private UpdateRequest makeIndexRequest(SyncOperation op) {
 		return EsUtils.makeIndexRequest(op.getIndex(), op.getCollection(), op.getId(), op.getJson());
 	}
 
@@ -190,7 +190,7 @@ public class IndexerProcess extends AsyncProcess<Boolean>
 	 * @return
 	 ********************************************
 	 */
-	private DeleteRequest makeDeleteRequest(MongoOperation op) {
+	private DeleteRequest makeDeleteRequest(SyncOperation op) {
 		return new DeleteRequest(op.getIndex())
 								.type(op.getCollection())
 								.id(op.getId());
