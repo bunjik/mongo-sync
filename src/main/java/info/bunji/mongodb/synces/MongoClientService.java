@@ -19,6 +19,7 @@ import org.slf4j.LoggerFactory;
 import com.mongodb.MongoClient;
 import com.mongodb.MongoClientOptions;
 import com.mongodb.MongoCredential;
+import com.mongodb.ReadPreference;
 import com.mongodb.ServerAddress;
 
 import info.bunji.mongodb.synces.SyncConfig.MongoConnection;
@@ -85,6 +86,8 @@ public class MongoClientService implements MongoCachedClient.Listener {
 
 				// 接続オプション
 				MongoClientOptions option = MongoClientOptions.builder()
+											.socketKeepAlive(true)
+											.readPreference(ReadPreference.primaryPreferred())
 											.connectionsPerHost(100).build();
 
 				// TODO sharding未対応
@@ -94,7 +97,7 @@ public class MongoClientService implements MongoCachedClient.Listener {
 					client = new MongoCachedClient(cacheKey, seeds, credentialList, option);
 				}
 				// check conection;
-				client.getReadPreference();
+				client.listDatabaseNames();
 
 				// イベントリスナの追加
 				client.addListener(_instance);
@@ -103,8 +106,6 @@ public class MongoClientService implements MongoCachedClient.Listener {
 			}
 
 			client.addRefCount();
-			//int refCount = client.addRefCount();
-			//logger.trace("current mongoClient refCount = " + refCount);
 		}
 		return client;
 	}

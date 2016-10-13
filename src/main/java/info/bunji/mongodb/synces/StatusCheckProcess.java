@@ -36,6 +36,7 @@ import org.elasticsearch.action.delete.DeleteRequest;
 import org.elasticsearch.action.search.SearchResponse;
 import org.elasticsearch.action.update.UpdateRequest;
 import org.elasticsearch.client.Client;
+import org.elasticsearch.index.IndexNotFoundException;
 import org.elasticsearch.search.SearchHit;
 import org.elasticsearch.search.SearchHits;
 import org.elasticsearch.search.sort.SortBuilders;
@@ -306,9 +307,11 @@ public class StatusCheckProcess extends AsyncProcess<Boolean> implements Indexer
 						//indexerMap.remove(entry.getKey());
 					}
 				}
+			} catch (IndexNotFoundException infe) {
+				// setting index not found.
 			} catch (Exception e) {
-				//logger.error(e.getMessage(), e);
-				logger.error(e.getMessage());
+				logger.error(e.getMessage(), e);
+				//logger.error(e.getMessage());
 			}
 
 			// wait next check.

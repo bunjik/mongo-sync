@@ -87,7 +87,10 @@ public class OplogExtractor extends AsyncProcess<SyncOperation> {
 				MongoCollection<Document> oplogCollection = client.getDatabase("local").getCollection("oplog.rs");
 				targetDb = client.getDatabase(config.getMongoDbName());
 				FindIterable<Document> results = oplogCollection
-								.find(Filters.gte("ts", timestamp))
+//								.find(Filters.gte("ts", timestamp))
+								.find()
+								.filter(Filters.gte("ts", timestamp))
+								.sort(new Document("$natural", 1))
 								.cursorType(CursorType.TailableAwait)
 								.noCursorTimeout(true)
 								.oplogReplay(true);
