@@ -210,7 +210,6 @@ public class StatusCheckProcess extends AsyncProcess<Boolean> implements Indexer
 //					}
 //				}
 
-
 				// esからステータスを取得
 				SearchResponse res = esClient.prepareSearch(SyncConfig.STATUS_INDEX)
 										.setTypes("status", "config")
@@ -310,8 +309,8 @@ public class StatusCheckProcess extends AsyncProcess<Boolean> implements Indexer
 			} catch (IndexNotFoundException infe) {
 				// setting index not found.
 			} catch (Exception e) {
-				logger.error(e.getMessage(), e);
-				//logger.error(e.getMessage());
+				//logger.error(e.getMessage(), e);
+				logger.error(e.getMessage());
 			}
 
 			// wait next check.
@@ -407,10 +406,12 @@ public class StatusCheckProcess extends AsyncProcess<Boolean> implements Indexer
 		Map<String, Object> config = (Map<String, Object>) getConfigs().get(syncName);
 		if (config != null && config.containsKey("config")) {
 			stopIndexer(syncName);
-			while (true) {
+			int count = 10;
+			do {
 				if (!isRunning(syncName)) break;
 				Thread.sleep(500);
-			}
+				count--;
+			} while (count > 0);
 
 			// delete index
 			String indexName = ((Map<String, String>) config.get("config")).get("indexName");
@@ -425,11 +426,13 @@ public class StatusCheckProcess extends AsyncProcess<Boolean> implements Indexer
 							.setConsistencyLevel(WriteConsistencyLevel.ALL)
 							.execute()
 							.actionGet();
-			while (true) {
+			count = 10;
+			do {
 				if (isRunning(syncName)) break;
 				logger.debug("waiting resync.");
 				Thread.sleep(500);
-			}
+				count--;
+			} while (count > 0);
 			Thread.sleep(500);
 			Thread.sleep(500);
 		}

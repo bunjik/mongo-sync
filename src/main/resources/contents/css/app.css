@@ -5,6 +5,10 @@
 	word-wrap:break-word;
 }
 
+.table tbody>tr>td.vert-align {
+    vertical-align: middle;
+}
+
 .glyphicon-refresh-animate {
 	-animation: spin .5s infinite linear;
 	-ms-animation: spin .5s infinite linear;

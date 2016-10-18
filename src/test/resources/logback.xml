@@ -11,7 +11,7 @@
 
   <logger name="chapters.configuration" level="WARN"/>
 
-  <logger name="org.elasticsearch.river.mongodb" level="TRACE"/>
+  <logger name="org.elasticsearch.river.mongodb" level="DEBUG"/>
   <logger name="info.bunji" level="TRACE"/>
 
   <root level="info">
