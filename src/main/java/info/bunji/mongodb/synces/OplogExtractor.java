@@ -83,11 +83,20 @@ public class OplogExtractor extends AsyncProcess<SyncOperation> {
 
 				logger.debug("[" + config.getSyncName() + "] start oplog sync.");
 
-				// oplogを継続的に取得
+				// check oplog timestamp outdated
 				MongoCollection<Document> oplogCollection = client.getDatabase("local").getCollection("oplog.rs");
-				targetDb = client.getDatabase(config.getMongoDbName());
 				FindIterable<Document> results = oplogCollection
-//								.find(Filters.gte("ts", timestamp))
+						.find()
+						.filter(Filters.lte("ts", timestamp))
+						.sort(new Document("$natural", 1))
+						.limit(1);
+				if (results.first() == null) {
+					throw new IllegalStateException("oplog outdated.");
+				}
+
+				// oplogを継続的に取得
+				targetDb = client.getDatabase(config.getMongoDbName());
+				results = oplogCollection
 								.find()
 								.filter(Filters.gte("ts", timestamp))
 								.sort(new Document("$natural", 1))
