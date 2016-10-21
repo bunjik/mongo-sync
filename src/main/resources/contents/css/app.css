@@ -1,5 +1,9 @@
 @CHARSET "UTF-8";
 
+.ace_editor {
+	height : 400px;
+}
+
 .word-wrap {
 	white-space:pre-wrap;
 	word-wrap:break-word;

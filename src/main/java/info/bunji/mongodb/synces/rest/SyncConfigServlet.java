@@ -52,16 +52,26 @@ public class SyncConfigServlet extends HttpServlet {
 	protected void doGet(HttpServletRequest req, HttpServletResponse res) throws ServletException, IOException {
 		//logger.debug("call doGet() " + req.getPathInfo());
 		try {
-			// パラメータの有無で取得内容を変更する
-			// 指定がなければ全件を返す
-			res.setContentType("application/json; charset=utf-8");
-			OutputStream os = res.getOutputStream();
-			res.setStatus(HttpServletResponse.SC_OK);
+			String[] params = req.getPathInfo().split("/");
+				if (params[1].equals("list")) {
+					res.setContentType("application/json; charset=utf-8");
+					OutputStream os = res.getOutputStream();
+					res.setStatus(HttpServletResponse.SC_OK);
 
-			Map<String, Object> results = new TreeMap<>();
-			results.put("results", process.getConfigs());
-			JSON.encode(results, os);
-			os.flush();
+					Map<String, Object> results = new TreeMap<>();
+					results.put("results", process.getConfigs());
+					JSON.encode(results, os);
+					os.flush();
+				} else if (params[1].equals("mapping")) {
+					res.setContentType("application/json; charset=utf-8");
+					OutputStream os = res.getOutputStream();
+					res.setStatus(HttpServletResponse.SC_OK);
+
+					Map<String, Object> results = new TreeMap<>();
+					results.put("results", process.getMapping(params[2]));
+					JSON.encode(results, os);
+					os.flush();
+				}
 		} catch (Exception e) {
 			logger.error(e.getMessage(), e);
 			res.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);

@@ -15,9 +15,11 @@
  */
 package info.bunji.mongodb.synces;
 
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.EventListener;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
@@ -30,12 +32,15 @@ import org.apache.commons.lang3.builder.ToStringBuilder;
 import org.apache.commons.lang3.builder.ToStringStyle;
 import org.bson.BsonTimestamp;
 import org.elasticsearch.action.WriteConsistencyLevel;
+import org.elasticsearch.action.admin.indices.mapping.get.GetMappingsResponse;
 import org.elasticsearch.action.bulk.BulkAction;
 import org.elasticsearch.action.bulk.BulkRequest;
 import org.elasticsearch.action.delete.DeleteRequest;
 import org.elasticsearch.action.search.SearchResponse;
 import org.elasticsearch.action.update.UpdateRequest;
 import org.elasticsearch.client.Client;
+import org.elasticsearch.cluster.metadata.MappingMetaData;
+import org.elasticsearch.common.collect.ImmutableOpenMap;
 import org.elasticsearch.index.IndexNotFoundException;
 import org.elasticsearch.search.SearchHit;
 import org.elasticsearch.search.SearchHits;
@@ -43,6 +48,7 @@ import org.elasticsearch.search.sort.SortBuilders;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.carrotsearch.hppc.cursors.ObjectObjectCursor;
 import com.google.gson.Gson;
 
 import info.bunji.asyncutil.AsyncExecutor;
@@ -82,6 +88,23 @@ public class StatusCheckProcess extends AsyncProcess<Boolean> implements Indexer
 
 	public boolean isRunning(String syncName) {
 		return indexerMap.containsKey(syncName);
+	}
+
+	public Map<String, Object> getMapping(String indexName) {
+		GetMappingsResponse res = esClient.admin().indices()
+							.prepareGetMappings(indexName)
+							.execute().actionGet();
+
+		Map<String,Object> result = new LinkedHashMap<>();
+		ImmutableOpenMap<String, MappingMetaData> mapping = res.getMappings().get(indexName);
+		for (ObjectObjectCursor<String, MappingMetaData> o : mapping) {
+			try {
+				result.put(o.key, o.value.sourceAsMap());
+			} catch (IOException ioe) {
+				//ioe.printStackTrace();
+			}
+		}
+		return result;
 	}
 
 	/**
@@ -126,6 +149,8 @@ public class StatusCheckProcess extends AsyncProcess<Boolean> implements Indexer
 		}
 		return mergeConfigs;
 	}
+
+
 
 	/*
 	 **********************************
@@ -461,6 +486,7 @@ public class StatusCheckProcess extends AsyncProcess<Boolean> implements Indexer
 		private Status status;
 		private BsonTimestamp lastOpTime;
 		private long indexCnt;
+		private String lastError;
 
 		public SyncStatus(Map<String, Object> map) {
 			this.status = Status.valueOf(Objects.toString(map.get("status"), ""));
@@ -494,6 +520,14 @@ public class StatusCheckProcess extends AsyncProcess<Boolean> implements Indexer
 
 		public String toJson() {
 			return EsUtils.makeStatusJson(status, indexCnt, lastOpTime);
+		}
+
+		public String getLastError() {
+			return lastError;
+		}
+
+		public void setLastError(String lastError) {
+			this.lastError = lastError;
 		}
 
 		@Override
