@@ -15,6 +15,7 @@
  */
 package info.bunji.mongodb.synces;
 
+import java.util.Objects;
 import java.util.Set;
 
 import org.bson.BsonTimestamp;
@@ -60,6 +61,7 @@ public class OplogExtractor extends AsyncProcess<SyncOperation> {
 	 */
 	OplogExtractor(SyncConfig config, BsonTimestamp ts) {
 		this.config = config;
+logger.debug(Objects.toString(ts, "ts is null!"));
 		if (ts != null) {
 			this.timestamp = new BSONTimestamp(ts.getTime(), ts.getInc());
 		}
@@ -85,13 +87,16 @@ public class OplogExtractor extends AsyncProcess<SyncOperation> {
 
 				// check oplog timestamp outdated
 				MongoCollection<Document> oplogCollection = client.getDatabase("local").getCollection("oplog.rs");
-				FindIterable<Document> results = oplogCollection
-						.find()
-						.filter(Filters.lte("ts", timestamp))
-						.sort(new Document("$natural", 1))
-						.limit(1);
-				if (results.first() == null) {
-					throw new IllegalStateException("oplog outdated.");
+				FindIterable<Document> results;
+				if (timestamp != null) {
+					results = oplogCollection
+							.find()
+							.filter(Filters.lte("ts", timestamp))
+							.sort(new Document("$natural", 1))
+							.limit(1);
+					if (results.first() == null) {
+						throw new IllegalStateException("oplog outdated.[" + timestamp + "]");
+					}
 				}
 
 				// oplogを継続的に取得
@@ -101,6 +106,8 @@ public class OplogExtractor extends AsyncProcess<SyncOperation> {
 								.filter(Filters.gte("ts", timestamp))
 								.sort(new Document("$natural", 1))
 								.cursorType(CursorType.TailableAwait)
+//.maxAwaitTime(10, TimeUnit.SECONDS)
+//.maxTime(10, TimeUnit.SECONDS)
 								.noCursorTimeout(true)
 								.oplogReplay(true);
 

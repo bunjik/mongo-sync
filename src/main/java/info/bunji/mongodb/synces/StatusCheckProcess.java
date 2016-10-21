@@ -288,10 +288,10 @@ public class StatusCheckProcess extends AsyncProcess<Boolean> implements Indexer
 						// config != null && status != null
 						IndexerProcess indexer = indexerMap.get(syncName);
 						SyncStatus statusInfo = tmpStatus.get(syncName);
-						config.addSyncCount(statusInfo.getIndexCnt());
 						if (indexer == null) {
 							if (Status.RUNNING.equals(statusInfo.getStatus())) {
 								// 起動時の再開
+								config.addSyncCount(-1);
 								extractor = new CollectionExtractor(config, statusInfo.getLastOpTime());
 							}
 						} else {

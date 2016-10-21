@@ -17,7 +17,6 @@ package info.bunji.mongodb.synces;
 
 import java.io.IOException;
 import java.util.EventListener;
-import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 
 import org.bson.BsonTimestamp;
@@ -66,8 +65,6 @@ public class IndexerProcess extends AsyncProcess<Boolean>
 	private static final long DEFAULT_BUlK_INTERVAL = 500;	// ms
 
 	private static final long DEFAULT_BULK_SIZE = 64; // MB
-
-	private CountDownLatch latch = new CountDownLatch(1);
 
 	/**
 	 **********************************
