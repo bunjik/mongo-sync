@@ -18,7 +18,6 @@ package info.bunji.mongodb.synces;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.EventListener;
-import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -43,17 +42,16 @@ import org.elasticsearch.cluster.metadata.MappingMetaData;
 import org.elasticsearch.common.collect.ImmutableOpenMap;
 import org.elasticsearch.index.IndexNotFoundException;
 import org.elasticsearch.search.SearchHit;
-import org.elasticsearch.search.SearchHits;
 import org.elasticsearch.search.sort.SortBuilders;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.carrotsearch.hppc.cursors.ObjectObjectCursor;
-import com.google.gson.Gson;
 
 import info.bunji.asyncutil.AsyncExecutor;
 import info.bunji.asyncutil.AsyncProcess;
 import info.bunji.mongodb.synces.util.EsUtils;
+import net.arnx.jsonic.JSON;
 
 /**
  ************************************************
@@ -90,6 +88,13 @@ public class StatusCheckProcess extends AsyncProcess<Boolean> implements Indexer
 		return indexerMap.containsKey(syncName);
 	}
 
+	/**
+	 **********************************
+	 * 指定インデックスのフィールドマッピングを取得する.
+	 * @param indexName 対象インデックス名
+	 * @return インデックスのフィールドマッピング情報
+	 **********************************
+	 */
 	public Map<String, Object> getMapping(String indexName) {
 		GetMappingsResponse res = esClient.admin().indices()
 							.prepareGetMappings(indexName)
@@ -111,7 +116,7 @@ public class StatusCheckProcess extends AsyncProcess<Boolean> implements Indexer
 	 *
 	 * @return
 	 */
-	public Map<String, Object> getConfigs() {
+	public Map<String, SyncConfig> getConfigList() {
 		SearchResponse res = esClient.prepareSearch(SyncConfig.STATUS_INDEX)
 				.setTypes("config", "status")
 				.addSort(SortBuilders.fieldSort("_type"))
@@ -119,38 +124,24 @@ public class StatusCheckProcess extends AsyncProcess<Boolean> implements Indexer
 				.execute()
 				.actionGet();
 
-		Map<String, Map<String, Object>> tmpConfig = new HashMap<>();
-		Map<String, SyncStatus> tmpStatus = new HashMap<>();
+		Map<String, SyncConfig> configMap = new TreeMap<>();
 		for (SearchHit hit : res.getHits().getHits()) {
-			String id = hit.getId();
 			if ("config".equals(hit.getType())) {
-				tmpConfig.put(id, hit.getSource());
-			} else {
-				tmpStatus.put(id, new SyncStatus(hit.getSource()));
-			}
-		}
-
-		Map<String, Object> mergeConfigs = new TreeMap<>();
-		for (Entry<String, Map<String, Object>> entry : tmpConfig.entrySet()) {
-			Map<String, Object> config = new TreeMap<>();
-
-			SyncStatus status = tmpStatus.get(entry.getKey());
-			if (status != null) {
-				config.put("status", status.getStatus().toString());
-				if (status.getLastOpTime() != null) {
-					config.put("lastTimestamp", status.getLastOpTime().getTime() * 1000L);
+				SyncConfig config = JSON.decode(hit.getSourceAsString(), SyncConfig.class);
+				config.setSyncName(hit.getId());
+				configMap.put(hit.getId(), config);
+			} else if ("status".equals(hit.getType()) && configMap.containsKey(hit.getId())) {
+				SyncConfig config = configMap.get(hit.getId());
+				SyncStatus status = new SyncStatus(hit.sourceAsMap());
+				config.setStatus(status.getStatus());
+				config.setLastOpTime(status.getLastOpTime());
+				if (indexerMap.get(config.getSyncName()) != null) {
+					config.addSyncCount(indexerMap.get(config.getSyncName()).getConfig().getSyncCount());
 				}
-				config.put("indexCnt", status.getIndexCnt());
-			} else {
-				//config.put("status", "UNKNOWN");
 			}
-			config.put("config", entry.getValue());
-			mergeConfigs.put(entry.getKey(), config);
 		}
-		return mergeConfigs;
+		return configMap;
 	}
-
-
 
 	/*
 	 **********************************
@@ -161,80 +152,69 @@ public class StatusCheckProcess extends AsyncProcess<Boolean> implements Indexer
 	@Override
 	protected void execute() throws Exception {
 
-		Gson gson = new Gson();
-
 		while (!isInterrupted()) {
 			try {
-//				// esからステータスを取得
-//				Map<String, SyncConfig> tmpConfigs = new HashMap<>();
-//				for (Entry<String, Object> entry : getConfigs().entrySet()) {
-//					String syncName = entry.getKey();
-//
-//					@SuppressWarnings("unchecked")
-//					Map<String, Object> config = Map.class.cast(entry.getValue());
-//					SyncConfig syncConf = JSON.decode(JSON.encode(config.get("config")), SyncConfig.class);
-//
-//					syncConf.setStatus(Status.valueOf(Objects.toString(config.get("status"), "UNKNOWN")));
-//					syncConf.setLastOpTime(BsonTimestamp.class.cast(config.get("lastTimestamp")));
-//					tmpConfigs.put(syncName, syncConf);
-//				}
-//
-//				for (Entry<String, SyncConfig> entry : tmpConfigs.entrySet()) {
-//					String syncName = entry.getKey();
-//					SyncConfig config = entry.getValue();
-//					DocumentExtractor extractor = null;
-//
-//					if (!indexerMap.containsKey(syncName)) {
-//						// 初期インポート(config != null && status == null)
-//						if (config.getStatus().equals(Status.UNKNOWN)
-//								&& !EsUtils.isExistsIndex(esClient, config.getIndexName())) {
-//							extractor = new DocumentExtractor(config, null);
-//							config.setStatus(Status.STARTING);
-//						} else {
-//							// インポート対象のインデックスが存在
-//							logger.error("import index already exists.[" + config.getIndexName() + "]");
-//							esClient.update(EsUtils.makeStatusRequest(config, Status.START_FAILED.name(), null));
-//							config.setStatus(Status.INITIAL_IMPORT_FAILED);
-//						}
-//					} else {
-//						// config != null && status != null
-//						IndexerInfo indexerInfo = indexerMap.get(syncName);
-//						if (indexerInfo == null) {
-//							if (Status.RUNNING.equals(config.getStatus())) {
-//								// 起動時の再開
-//								extractor = new DocumentExtractor(config, config.getLastOpTime());
-//							}
-//						} else {
-//							if (!Status.RUNNING.equals(config.getStatus())
-//								&& !Status.INITIAL_IMPORTING.equals(config.getStatus())
-//								&& !Status.STARTING.equals(config.getStatus())) {
-//								// 実行中処理の停止
-//								logger.debug("indexer stopping.[" + syncName + "]");
-//								indexerInfo.indexerProc.stop();
-//								indexerMap.remove(syncName);
-//							}
-//						}
-//					}
-//
-//					if (extractor != null) {
-//						// 同期処理の開始
-//						OplogExtractor oplogExtractor = new OplogExtractor(config, config.getLastOpTime());
-//						IndexerProcess indexerProc = new IndexerProcess(esClient, config, this,
-//											AsyncExecutor.execute(Arrays.asList(extractor, oplogExtractor), 1, 5000));
-//
-//						AsyncExecutor.execute(indexerProc);
-//						indexerMap.put(syncName, new IndexerInfo(indexerProc, "RUNNING"));
-//					}
-//				}
-//
-//				// configの存在しないindexerは停止する
-//				for (Entry<String, IndexerInfo> entry : indexerMap.entrySet()) {
-//					if (!tmpConfigs.containsKey(entry.getKey())) {
-//						entry.getValue().getIndexer().stop();
-//						//indexerMap.remove(entry.getKey());
-//					}
-//				}
+				// esからステータスを取得
+				Map<String, SyncConfig> configs = getConfigList();
+				for (Entry<String, SyncConfig> entry : configs.entrySet()) {
+					String syncName = entry.getKey();
+					SyncConfig config = entry.getValue();
 
+					CollectionExtractor extractor = null;
+					IndexerProcess indexer = indexerMap.get(syncName);
+					if (indexer == null) {
+						if (config.getStatus() == null) {
+							// initial import
+							if (!EsUtils.isExistsIndex(esClient, config.getIndexName())) {
+								extractor = new CollectionExtractor(config, null);
+								config.setStatus(Status.STARTING);
+							} else {
+								// インポート対象のインデックスが存在
+								logger.error("import index already exists.[" + config.getIndexName() + "]");
+								esClient.update(EsUtils.makeStatusRequest(config, Status.START_FAILED, null));
+								config.setStatus(Status.INITIAL_IMPORT_FAILED);
+							}
+						} else if (Status.RUNNING == config.getStatus()) {
+							// 起動時の再開
+							extractor = new CollectionExtractor(config, config.getLastOpTime());
+						}
+					} else {
+						switch (config.getStatus()) {
+						case INITIAL_IMPORT_FAILED :
+						case STOPPED :
+							// stop indexer
+							logger.debug("indexer stopping.[" + syncName + "]");
+							indexer.stop();
+							indexerMap.remove(syncName);
+							break;
+
+						default :
+							// do nothing.
+							break;
+						}
+					}
+
+					if (extractor != null) {
+						// 同期処理の開始
+						BsonTimestamp ts = config.getLastOpTime();
+						List<AsyncProcess<SyncOperation>> procList = new ArrayList<>();
+						procList.add(extractor);
+						procList.add(new OplogExtractor(config, ts));
+						IndexerProcess indexerProc = new IndexerProcess(esClient, config, this,
+															AsyncExecutor.execute(procList, 1, 5000));
+						indexerMap.put(syncName, indexerProc);
+						AsyncExecutor.execute(indexerProc);
+					}
+				}
+
+				// configの存在しないindexerは停止する
+				for (Entry<String, IndexerProcess> entry : indexerMap.entrySet()) {
+					if (!configs.containsKey(entry.getKey())) {
+						entry.getValue().stop();
+						//indexerMap.remove(entry.getKey());
+					}
+				}
+/***
 				// esからステータスを取得
 				SearchResponse res = esClient.prepareSearch(SyncConfig.STATUS_INDEX)
 										.setTypes("status", "config")
@@ -331,6 +311,7 @@ public class StatusCheckProcess extends AsyncProcess<Boolean> implements Indexer
 						//indexerMap.remove(entry.getKey());
 					}
 				}
+***/
 			} catch (IndexNotFoundException infe) {
 				// setting index not found.
 			} catch (Exception e) {
@@ -428,8 +409,8 @@ public class StatusCheckProcess extends AsyncProcess<Boolean> implements Indexer
 	 * @throws InterruptedException
 	 */
 	public boolean resyncIndexer(String syncName) throws InterruptedException {
-		Map<String, Object> config = (Map<String, Object>) getConfigs().get(syncName);
-		if (config != null && config.containsKey("config")) {
+		SyncConfig config = getConfigList().get(syncName);
+		if (config != null) {
 			stopIndexer(syncName);
 			int count = 10;
 			do {
@@ -439,7 +420,7 @@ public class StatusCheckProcess extends AsyncProcess<Boolean> implements Indexer
 			} while (count > 0);
 
 			// delete index
-			String indexName = ((Map<String, String>) config.get("config")).get("indexName");
+			String indexName = config.getIndexName();
 			if (EsUtils.isExistsIndex(esClient, indexName)) {
 				esClient.admin().indices().prepareDelete(indexName)
 								.execute().actionGet();
@@ -451,6 +432,8 @@ public class StatusCheckProcess extends AsyncProcess<Boolean> implements Indexer
 							.setConsistencyLevel(WriteConsistencyLevel.ALL)
 							.execute()
 							.actionGet();
+
+			// waiting start
 			count = 10;
 			do {
 				if (isRunning(syncName)) break;
@@ -458,12 +441,10 @@ public class StatusCheckProcess extends AsyncProcess<Boolean> implements Indexer
 				Thread.sleep(500);
 				count--;
 			} while (count > 0);
-			Thread.sleep(500);
-			Thread.sleep(500);
+			Thread.sleep(1000);
 		}
 		return true;
 	}
-
 
 	@Override
 	public void onIndexerStop(String syncName) {
@@ -485,7 +466,7 @@ public class StatusCheckProcess extends AsyncProcess<Boolean> implements Indexer
 	private static final class SyncStatus {
 		private Status status;
 		private BsonTimestamp lastOpTime;
-		private long indexCnt;
+//		private long indexCnt;
 		private String lastError;
 
 		public SyncStatus(Map<String, Object> map) {
@@ -496,10 +477,10 @@ public class StatusCheckProcess extends AsyncProcess<Boolean> implements Indexer
 				int inc = ts.get("inc").intValue();
 				this.lastOpTime = new BsonTimestamp(sec, inc);
 			}
-			try {
-				this.setIndexCnt(Long.valueOf(map.get("indexCnt").toString()));
-			} catch (Exception e) {
-			}
+//			try {
+//				this.setIndexCnt(Long.valueOf(map.get("indexCnt").toString()));
+//			} catch (Exception e) {
+//			}
 		}
 
 		public Status getStatus() {
@@ -510,16 +491,8 @@ public class StatusCheckProcess extends AsyncProcess<Boolean> implements Indexer
 			return lastOpTime;
 		}
 
-		public long getIndexCnt() {
-			return indexCnt;
-		}
-
-		public void setIndexCnt(long indexCnt) {
-			this.indexCnt = indexCnt;
-		}
-
 		public String toJson() {
-			return EsUtils.makeStatusJson(status, indexCnt, lastOpTime);
+			return EsUtils.makeStatusJson(status, null, lastOpTime);
 		}
 
 		public String getLastError() {

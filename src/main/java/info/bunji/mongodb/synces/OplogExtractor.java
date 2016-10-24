@@ -15,7 +15,6 @@
  */
 package info.bunji.mongodb.synces;
 
-import java.util.Objects;
 import java.util.Set;
 
 import org.bson.BsonTimestamp;
@@ -26,6 +25,7 @@ import org.slf4j.LoggerFactory;
 
 import com.mongodb.CursorType;
 import com.mongodb.MongoClient;
+import com.mongodb.MongoClientException;
 import com.mongodb.MongoInterruptedException;
 import com.mongodb.MongoSocketException;
 import com.mongodb.client.FindIterable;
@@ -61,7 +61,6 @@ public class OplogExtractor extends AsyncProcess<SyncOperation> {
 	 */
 	OplogExtractor(SyncConfig config, BsonTimestamp ts) {
 		this.config = config;
-logger.debug(Objects.toString(ts, "ts is null!"));
 		if (ts != null) {
 			this.timestamp = new BSONTimestamp(ts.getTime(), ts.getInc());
 		}
@@ -106,8 +105,6 @@ logger.debug(Objects.toString(ts, "ts is null!"));
 								.filter(Filters.gte("ts", timestamp))
 								.sort(new Document("$natural", 1))
 								.cursorType(CursorType.TailableAwait)
-//.maxAwaitTime(10, TimeUnit.SECONDS)
-//.maxTime(10, TimeUnit.SECONDS)
 								.noCursorTimeout(true)
 								.oplogReplay(true);
 
@@ -147,9 +144,8 @@ logger.debug(Objects.toString(ts, "ts is null!"));
 						logger.debug("unsupported Operation [{}]", operation);
 					}
 				}
-			} catch (MongoInterruptedException mie) {
-				// interrupt oplog tailable process.
-				break;
+			} catch (MongoClientException mce) {
+				//
 			} catch (MongoSocketException mse) {
 				retryCnt++;
 				if (retryCnt >= 10) {
@@ -157,6 +153,9 @@ logger.debug(Objects.toString(ts, "ts is null!"));
 					throw mse;
 				}
 				logger.warn("mongo connect retry. (cnt=" + retryCnt  + ")");
+			} catch (MongoInterruptedException mie) {
+				// interrupt oplog tailable process.
+				break;
 			} catch (Throwable t) {
 				logger.error(t.getMessage(), t);
 				throw t;
@@ -164,12 +163,11 @@ logger.debug(Objects.toString(ts, "ts is null!"));
 		}
 	}
 
-
-	private Document getUpdateDocument(String collection, Document idDoc) {
-		String namespace = getCollectionName(idDoc);
-		MongoCollection<Document> extractCollection = targetDb.getCollection(collection);
-		return extractCollection.find((Document) idDoc.get("o2")).first();
-	}
+//	private Document getUpdateDocument(String collection, Document idDoc) {
+//		String namespace = getCollectionName(idDoc);
+//		MongoCollection<Document> extractCollection = targetDb.getCollection(collection);
+//		return extractCollection.find((Document) idDoc.get("o2")).first();
+//	}
 
 	/**
 	 **********************************

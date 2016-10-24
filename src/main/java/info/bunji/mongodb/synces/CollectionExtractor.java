@@ -84,18 +84,17 @@ public class CollectionExtractor extends AsyncProcess<SyncOperation> {
 			if (timestamp == null) {
 				logger.info("[{}] start initial import from db [{}]", config.getSyncName(), config.getMongoDbName());
 
-				// update status
-				Document statusDoc = DocumentUtils.makeStatusDocument(Status.INITIAL_IMPORTING, null, null);
-				append(new SyncOperation(Operation.INSERT, "status", statusDoc, config.getSyncName()));
-
 				// 処理開始時点のoplogの最終タイムスタンプを取得しておく
 				MongoCollection<Document> oplog  = client.getDatabase("local").getCollection("oplog.rs");
 				Document lastOp = oplog.find().sort(new BasicDBObject("$natural", -1)).limit(1).first();
 				BsonTimestamp lastOpTs = lastOp.get("ts", BsonTimestamp.class);
-//				timestamp = new BSONTimestamp(lastOpTs.getTime(), lastOpTs.getInc());
 
 				// 同期対象コレクション名の一覧を取得する
 				MongoDatabase db = client.getDatabase(config.getMongoDbName());
+
+				// update status
+				Document statusDoc = DocumentUtils.makeStatusDocument(Status.INITIAL_IMPORTING, null, null);
+				append(new SyncOperation(Operation.INSERT, "status", statusDoc, config.getSyncName()));
 
 				// コレクション毎に初期同期を行う
 				Object lastId = null;

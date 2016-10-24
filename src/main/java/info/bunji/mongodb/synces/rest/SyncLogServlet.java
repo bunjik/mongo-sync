@@ -52,8 +52,10 @@ public class SyncLogServlet extends HttpServlet {
 			appender = new CyclicBufferAppender<>();
 			appender.setMaxSize(LOG_SIZE);
 			ThresholdFilter filter = new ThresholdFilter();
-			filter.setLevel("INFO");
-			appender.addFilter(filter);	// 効いていない？
+//			filter.setLevel("INFO");
+			filter.setLevel("DEBUG");
+			filter.start();
+			appender.addFilter(filter);
 			((ch.qos.logback.classic.Logger) rootLogger).addAppender(appender);
 			appender.start();
 		}

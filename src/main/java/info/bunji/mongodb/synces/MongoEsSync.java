@@ -19,7 +19,9 @@ import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.InetAddress;
+import java.util.HashSet;
 import java.util.Properties;
+import java.util.Set;
 
 import org.eclipse.jetty.server.Server;
 import org.eclipse.jetty.server.handler.ContextHandler;
@@ -32,6 +34,7 @@ import org.elasticsearch.client.Client;
 import org.elasticsearch.client.transport.TransportClient;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.transport.InetSocketTransportAddress;
+import org.elasticsearch.common.transport.TransportAddress;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -53,6 +56,8 @@ public class MongoEsSync {
 
 	public static final long CHECK_INTERVAL = 2000;
 
+	public static final String DEFAULT_PORT = "1234";
+
 	static {
 		// デフォルト値の設定
 		// default
@@ -60,8 +65,7 @@ public class MongoEsSync {
 		//   es.port: 9300
 		//   es.clustername: elasticsearch
 		defaultProps = new Properties();
-		defaultProps.put("es.host", "localhost");
-		defaultProps.put("es.prot", "9300");
+		defaultProps.put("es.hosts", "localhost:9300");
 		defaultProps.put("es.clustername", "elasticsearch");
 	}
 
@@ -84,19 +88,38 @@ public class MongoEsSync {
 			System.exit(1);
 		}
 
+		Set<TransportAddress> addresses = new HashSet<>();
+		for (String host : prop.getProperty("es.hosts").split(",")) {
+			String[] addr = host.split(":");
+			String name = addr[0];
+			String port = "9300";	// default transport port
+			if (addr.length > 1) {
+				port = addr[1];
+			}
+			addresses.add(new InetSocketTransportAddress(
+								InetAddress.getByName(name),
+								Integer.valueOf(port)));
+		}
+
 		Settings settings = Settings.settingsBuilder()
-		        .put("cluster.name", prop.getProperty("es.clustername"))
-		        .build();
+				.put("cluster.name", prop.getProperty("es.clustername"))
+				.build();
 		final Client esClient = TransportClient.builder()
 				.settings(settings)
 				.build()
-				.addTransportAddress(new InetSocketTransportAddress(
-									InetAddress.getByName(prop.getProperty("es.host")),
-									Integer.valueOf(prop.getProperty("es.port"))));
+				.addTransportAddresses(addresses.toArray(new InetSocketTransportAddress[0]));
+
+//		int faildShared;
+//		do {
+//
+//			faildShared = esClient.admin().indices().prepareStats(SyncConfig.STATUS_INDEX).get().getFailedShards();
+//			Thread.sleep(3000);
+//		} while (faildShared > 0);
+
 		StatusCheckProcess process = new StatusCheckProcess(esClient, CHECK_INTERVAL);
 
-		// ポート番号は後で外部化
-		Server server = new Server(1234);
+		String serverPort = prop.getProperty("server.port", DEFAULT_PORT);
+		Server server = new Server(Integer.parseInt(serverPort));
 
 		// static contents
 		ResourceHandler rh = new ResourceHandler();

@@ -308,7 +308,7 @@ app.controller('MongoSyncCtrl', function ($log, $scope, $resource, $http, $inter
 				<uib-tabset>
 					<uib-tab active="activeTab == 'settings'">
 						<uib-tab-heading>
-							<b><i class="glyphicon glyphicon-wrench"></i> <u>S</u>ync Settings</b>
+							<b><i class="glyphicon glyphicon-wrench"></i>Sync Settings</b>
 						</uib-tab-heading>
 						<br>
 						<table class="table table-condensed table-bordered table-hover _table-striped">
@@ -335,8 +335,8 @@ app.controller('MongoSyncCtrl', function ($log, $scope, $resource, $http, $inter
 											<span x-ng-switch-default class="label label-danger">{{config.status}}</span>
 										</span>
 									</td>
-									<td class="text-center vert-align word-wrap">{{ config.lastTimestamp ? (config.lastTimestamp | date:'yyyy-MM-dd HH:mm:ss Z') : 'never' }}</td>
-									<td class="text-right vert-align word-wrap">{{ config.indexCnt | number }}</td>
+									<td class="text-center vert-align word-wrap">{{ config.lastOpTime.time ? (config.lastOpTime.time * 1000 | date:'yyyy-MM-dd HH:mm:ss Z') : 'never' }}</td>
+									<td class="text-right vert-align word-wrap">{{ config.syncCount | number }}</td>
 									<td class="text-center vert-align">
 										<span x-ng-show="config.status != 'RUNNING' && config.status != 'INITIAL_IMPORTING'">
 											<button class="btn btn-sm btn-success" x-ng-click="start(syncName)">
@@ -374,7 +374,7 @@ app.controller('MongoSyncCtrl', function ($log, $scope, $resource, $http, $inter
 
 					<uib-tab active="activeTab == 'log'">
 						<uib-tab-heading>
-							<b><i class="glyphicon glyphicon-th-list"></i> <u>L</u>ast Log</b>
+							<b><i class="glyphicon glyphicon-th-list"></i>Last Log</b>
 						</uib-tab-heading>
 						<br>
 	  					<table class="table table-condensed _table-striped table-hover _table-bordered">

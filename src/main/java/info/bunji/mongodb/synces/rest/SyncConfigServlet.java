@@ -59,7 +59,7 @@ public class SyncConfigServlet extends HttpServlet {
 					res.setStatus(HttpServletResponse.SC_OK);
 
 					Map<String, Object> results = new TreeMap<>();
-					results.put("results", process.getConfigs());
+					results.put("results", process.getConfigList());
 					JSON.encode(results, os);
 					os.flush();
 				} else if (params[1].equals("mapping")) {

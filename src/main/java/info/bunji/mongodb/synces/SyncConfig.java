@@ -70,7 +70,7 @@ public class SyncConfig {
 
 	/** 同期件数 */
 	@JSONHint(ignore=true)
-	private AtomicLong syncCount = new AtomicLong();
+	private AtomicLong syncCount = new AtomicLong(0);
 
 	/** ステータス */
 	@JSONHint(ignore=true)

@@ -95,10 +95,11 @@ public class IndexerProcess extends AsyncProcess<Boolean>
 				// monodbの操作日時を取得
 				oplogTs = op.getTimestamp();
 
-				// TODO:同期対象外が続いた場合は、一定件数毎にステータスを更新したほうが良いかも？
-				if (!config.isTargetCollection(op.getCollection()) && !SyncConfig.STATUS_INDEX.equals(op.getIndex())) {
-					// 同期対象外
+				if (SyncConfig.STATUS_INDEX.equals(op.getIndex())) {
+					processor.add(makeIndexRequest(op));
 					continue;
+				} else if (!config.isTargetCollection(op.getCollection())) {
+					continue;	// 同期対象外
 				}
 
 				switch (op.getOp()) {
@@ -161,7 +162,6 @@ public class IndexerProcess extends AsyncProcess<Boolean>
 			} catch (InterruptedException e) {
 				e.printStackTrace();
 			}
-//			latch.countDown();
 		}
 	}
 
@@ -249,9 +249,6 @@ public class IndexerProcess extends AsyncProcess<Boolean>
 								config.getSyncName(),
 								response.getItems().length,
 								response.getTookInMillis()));
-		//if (response.hasFailures()) {
-		//	logger.error(response.buildFailureMessage());
-		//}
 		for (BulkItemResponse item : response) {
 			if (item.isFailed()) {
 				logger.error("[{}] index:[{}], type:[{}] id:[{}] msg:[{}]",
