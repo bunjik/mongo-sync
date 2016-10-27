@@ -64,8 +64,6 @@ public class CollectionExtractor extends AsyncProcess<SyncOperation> {
 		this.config = config;
 		if (ts != null) {
 			this.timestamp = new BSONTimestamp(ts.getTime(), ts.getInc());
-//		} else {
-//			this.timestamp = new BSONTimestamp(0, 0);
 		}
 	}
 

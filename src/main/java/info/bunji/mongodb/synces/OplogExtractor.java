@@ -15,6 +15,7 @@
  */
 package info.bunji.mongodb.synces;
 
+import java.net.UnknownHostException;
 import java.util.Set;
 
 import org.bson.BsonTimestamp;
@@ -96,6 +97,7 @@ public class OplogExtractor extends AsyncProcess<SyncOperation> {
 					if (results.first() == null) {
 						throw new IllegalStateException("oplog outdated.[" + timestamp + "]");
 					}
+					config.addSyncCount(-1);	// 同期開始時に最終同期を再度同期するため１減算しておく
 				}
 
 				// oplogを継続的に取得
@@ -145,14 +147,15 @@ public class OplogExtractor extends AsyncProcess<SyncOperation> {
 					}
 				}
 			} catch (MongoClientException mce) {
-				//
-			} catch (MongoSocketException mse) {
+				// do nothing.
+			} catch (UnknownHostException | MongoSocketException mse) {
 				retryCnt++;
 				if (retryCnt >= 10) {
 					logger.error("mongo connect failed. (cnt=" + retryCnt  + ")", mse);
 					throw mse;
 				}
 				logger.warn("mongo connect retry. (cnt=" + retryCnt  + ")");
+				Thread.sleep(1000 * retryCnt);
 			} catch (MongoInterruptedException mie) {
 				// interrupt oplog tailable process.
 				break;

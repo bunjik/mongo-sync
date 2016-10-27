@@ -35,13 +35,13 @@ import net.arnx.jsonic.JSON;
  * @author Fumiharu Kinoshita
  *
  */
-public class SyncConfigServlet extends HttpServlet {
+public class RestServlet extends HttpServlet {
 
 	private Logger logger = LoggerFactory.getLogger(getClass());
 
 	private StatusCheckProcess process;
 
-	public SyncConfigServlet(StatusCheckProcess process) {
+	public RestServlet(StatusCheckProcess process) {
 		this.process = process;
 	}
 
@@ -53,25 +53,25 @@ public class SyncConfigServlet extends HttpServlet {
 		//logger.debug("call doGet() " + req.getPathInfo());
 		try {
 			String[] params = req.getPathInfo().split("/");
-				if (params[1].equals("list")) {
-					res.setContentType("application/json; charset=utf-8");
-					OutputStream os = res.getOutputStream();
-					res.setStatus(HttpServletResponse.SC_OK);
-
-					Map<String, Object> results = new TreeMap<>();
-					results.put("results", process.getConfigList());
-					JSON.encode(results, os);
-					os.flush();
-				} else if (params[1].equals("mapping")) {
-					res.setContentType("application/json; charset=utf-8");
-					OutputStream os = res.getOutputStream();
-					res.setStatus(HttpServletResponse.SC_OK);
-
-					Map<String, Object> results = new TreeMap<>();
-					results.put("results", process.getMapping(params[2]));
-					JSON.encode(results, os);
-					os.flush();
-				}
+			res.setContentType("application/json; charset=utf-8");
+			OutputStream os = res.getOutputStream();
+			if (params[1].equals("list")) {
+				res.setStatus(HttpServletResponse.SC_OK);
+				Map<String, Object> results = new TreeMap<>();
+				results.put("results", process.getConfigList());
+				JSON.encode(results, os);
+			} else if (params[1].equals("config") && params.length >= 3) {
+//				results.put("results", process.getConfigList().get(params[2]));
+				JSON.encode(process.getConfigList().get(params[2]), os);
+			} else if (params[1].equals("mapping") && params.length >= 3) {
+				res.setStatus(HttpServletResponse.SC_OK);
+				Map<String, Object> results = new TreeMap<>();
+				results.put("results", process.getMapping(params[2]));
+				JSON.encode(results, os);
+			} else {
+				res.setStatus(HttpServletResponse.SC_BAD_REQUEST);
+			}
+			os.flush();
 		} catch (Exception e) {
 			logger.error(e.getMessage(), e);
 			res.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
@@ -87,9 +87,11 @@ public class SyncConfigServlet extends HttpServlet {
 			String[] params = req.getPathInfo().split("/");
 			if (params.length == 3) {
 				if (params[1].equals("start")) {
+					// start indexer
 					process.startIndexer(params[2]);
 					res.setStatus(HttpServletResponse.SC_OK);
 				} else if (params[1].equals("stop")) {
+					// stop indexer
 					process.stopIndexer(params[2]);
 					res.setStatus(HttpServletResponse.SC_OK);
 				} else {
@@ -114,18 +116,14 @@ public class SyncConfigServlet extends HttpServlet {
 
 		try {
 			String[] params = req.getPathInfo().split("/");
-			if (params.length == 3) {
-				if (params[1].equals("resync")) {
-					String syncName = params[2];
+			if (params.length == 3 && params[1].equals("resync")) {
+				String syncName = params[2];
 
-					// stop indexer
-					process.resyncIndexer(syncName);
+				// stop indexer
+				process.resyncIndexer(syncName);
 
-					logger.debug("resync started.");
-					res.setStatus(HttpServletResponse.SC_OK);
-				} else {
-					res.setStatus(HttpServletResponse.SC_BAD_REQUEST);
-				}
+				logger.debug("resync started.");
+				res.setStatus(HttpServletResponse.SC_OK);
 			} else {
 				res.setStatus(HttpServletResponse.SC_BAD_REQUEST);
 			}
@@ -142,13 +140,9 @@ public class SyncConfigServlet extends HttpServlet {
 	protected void doDelete(HttpServletRequest req, HttpServletResponse res) throws ServletException, IOException {
 		try {
 			String[] params = req.getPathInfo().split("/");
-			if (params.length == 3) {
-				if (params[1].equals("delete")) {
-					process.deleteIndexer(params[2]);
-					res.setStatus(HttpServletResponse.SC_OK);
-				} else {
-					res.setStatus(HttpServletResponse.SC_BAD_REQUEST);
-				}
+			if (params.length == 3 && params[1].equals("delete")) {
+				process.deleteIndexer(params[2]);
+				res.setStatus(HttpServletResponse.SC_OK);
 			} else {
 				res.setStatus(HttpServletResponse.SC_BAD_REQUEST);
 			}

@@ -1,5 +1,24 @@
 @CHARSET "UTF-8";
 
+body {
+	padding-top: 40px;
+}
+
+/* header */
+.navbar {
+  min-height: 30px !important
+}
+
+.navbar-brand {
+  height: 30px;
+  padding: 5px 15px;
+}
+
+navbar-nav > li > a {
+  padding-top: 10px !important;
+  padding-bottom: 10px !important;
+}
+
 .ace_editor {
 	height : 400px;
 }

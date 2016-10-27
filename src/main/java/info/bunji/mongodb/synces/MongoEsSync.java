@@ -40,7 +40,7 @@ import org.slf4j.LoggerFactory;
 
 import info.bunji.asyncutil.AsyncExecutor;
 import info.bunji.asyncutil.AsyncResult;
-import info.bunji.mongodb.synces.rest.SyncConfigServlet;
+import info.bunji.mongodb.synces.rest.RestServlet;
 import info.bunji.mongodb.synces.rest.SyncLogServlet;
 
 /**
@@ -128,9 +128,9 @@ public class MongoEsSync {
 		staticContext.setContextPath("/");
 		staticContext.setHandler(rh);
 
-		// api
+		// rest api
 		ServletContextHandler apiContext = new ServletContextHandler(server, "/api");
-		apiContext.addServlet(new ServletHolder(new SyncConfigServlet(process)), "/configs/*");
+		apiContext.addServlet(new ServletHolder(new RestServlet(process)), "/configs/*");
 		apiContext.addServlet(new ServletHolder(new SyncLogServlet()), "/log");
 
 		ContextHandlerCollection handlers = new ContextHandlerCollection();

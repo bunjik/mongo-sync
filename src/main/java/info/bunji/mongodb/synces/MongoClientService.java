@@ -13,8 +13,6 @@ import java.util.Objects;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.builder.ToStringBuilder;
 import org.apache.commons.lang3.builder.ToStringStyle;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import com.mongodb.MongoClient;
 import com.mongodb.MongoClientOptions;
@@ -31,7 +29,7 @@ import info.bunji.mongodb.synces.SyncConfig.ServerInfo;
  */
 public class MongoClientService implements MongoCachedClient.Listener {
 
-	private static final Logger logger = LoggerFactory.getLogger(MongoClientService.class);
+	//private static final Logger logger = LoggerFactory.getLogger(MongoClientService.class);
 
 	private static final Map<ClientCacheKey, MongoCachedClient> mongoClients = new HashMap<>();
 

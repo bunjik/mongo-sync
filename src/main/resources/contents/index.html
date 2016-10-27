@@ -114,6 +114,7 @@ app.controller('MongoSyncCtrl', function ($log, $scope, $resource, $http, $inter
 		{
 			list:    {method:'GET',    params: {action: 'list'}},
 			mapping: {method:'GET',    params: {action: 'mapping'}},
+			config:  {method:'GET',    params: {action: 'config'}},
 			start:   {method:'POST',   params: {action: 'start'}},
 			stop:    {method:'POST',   params: {action: 'stop'}},
 			delete:  {method:'DELETE', params: {action: 'delete'}},
@@ -128,7 +129,6 @@ app.controller('MongoSyncCtrl', function ($log, $scope, $resource, $http, $inter
 				templateUrl: 'deleteDlg.html',
 				controller: 'deleteDlgCtrl',
 				scope : $scope,
-//				size: "sm",
 				resolve: {
 					params: function () {
 						return { syncName : syncName };
@@ -144,7 +144,6 @@ app.controller('MongoSyncCtrl', function ($log, $scope, $resource, $http, $inter
 				templateUrl: 'resyncDlg.html',
 				controller: 'resyncDlgCtrl',
 				scope : $scope,
-//				size: "sm",
 				resolve: {
 					params: function () {
 						return { syncName : syncName };
@@ -179,6 +178,8 @@ app.controller('MongoSyncCtrl', function ($log, $scope, $resource, $http, $inter
 	$scope.logReloadPromise = null;
 	$scope.isLoading = false;
 	$scope.refreshInterval = "";
+	$scope.lastUpdate = undefined;
+	$scope.alarts = [];
 
 	$scope.activeTab = "settings";
 
@@ -205,9 +206,11 @@ app.controller('MongoSyncCtrl', function ($log, $scope, $resource, $http, $inter
 	$scope.list = function() {
 		syncConfigs.list(function(data) {
 			$scope.configs = data.results;
-			angular.forEach($scope.configs, function(value, key) {
-				value['isCollapsed'] = true;
-			});
+//			angular.forEach($scope.configs, function(value, key) {
+//				delete value['syncCount'];
+//				delete value['lastOptime'];
+//			});
+			$scope.lastUpdate = new Date();
 		});
 	};
 
@@ -226,21 +229,31 @@ app.controller('MongoSyncCtrl', function ($log, $scope, $resource, $http, $inter
 	};
 
 	$scope.delete = function(name) {
-		$log.log('delete: ' + name);
+		//$log.log('delete: ' + name);
 		syncConfigs.delete({'id': name}, function() {
 			$scope.reload();
 		});
 	};
 
 	$scope.resync = function(name) {
-		$log.log('resync: ' + name);
+		//$log.log('resync: ' + name);
 		syncConfigs.resync({'id': name}, function() {
 			$scope.reload();
 		});
 	};
 
+	$scope.showConfig = function(name) {
+		//$log.log('config: ' + name);
+		syncConfigs.config({'id': name}, function(data) {
+			delete data['syncCount'];
+			delete data['lastOpTime'];
+			delete data['status'];
+			$scope.showInfo("config", name, data);
+		});
+	}
+
 	$scope.mapping = function(indexName) {
-		$log.log('mapping: ' + indexName);
+		//$log.log('mapping: ' + indexName);
 		syncConfigs.mapping({'id': indexName}, function(data) {
 			console.log(data.results);
 			$scope.showInfo("mapping", indexName, data.results);
@@ -252,7 +265,7 @@ app.controller('MongoSyncCtrl', function ($log, $scope, $resource, $http, $inter
 	 **********************************
 	 */
 	$scope.getLog = function() {
-//		$scope.isLoading = true;
+		$scope.isLoading = true;
 		return $http({
 			method: "GET",
 			url: '/api/log',
@@ -260,12 +273,11 @@ app.controller('MongoSyncCtrl', function ($log, $scope, $resource, $http, $inter
 		}).then(function(res) {
 			$scope.logs = res.data.results;
 		})['finally'](function() {
-//			$scope.isLoading = false;
+			$scope.isLoading = false;
 		});
 	}
 
 	$scope.reload = function() {
-		$scope.isLoading = true;
 		$scope.list();
 		$scope.getLog();
 		$scope.isLoading = false;
@@ -294,39 +306,87 @@ app.controller('MongoSyncCtrl', function ($log, $scope, $resource, $http, $inter
 });
 </script>
 </head>
-<body>
-	<div x-ng-controller="MongoSyncCtrl as $ctrl" class="container">
+<body x-ng-controller="MongoSyncCtrl as $ctrl">
+	<div class="navbar navbar-default navbar-fixed-top" role="navigation">
+		<div class="container">
+			<div class="navbar-header">
+				<button type="button" class="navbar-toggle" data-toggle="collapse" data-target="#nav-menu-1">
+					<span class="sr-only">Toggle navigation</span>
+					<span class="icon-bar"></span>
+					<span class="icon-bar"></span>
+					<span class="icon-bar"></span>
+				</button>
+				<a class="navbar-brand" href="#">MongoDB Sync Administration</a>
+			</div>
+<!--
+			<div class="collapse navbar-collapse" id="#nav-menu-1">
+				<ul class="nav navbar-nav">
+
+					<li class="dropdown">
+						<a href="#" class="dropdown-toggle" data-toggle="dropdown">System <b class="caret"></b></a>
+					</li>
+					<li class="dropdown">
+						<a href="#" class="dropdown-toggle" data-toggle="dropdown">System <b class="caret"></b></a>
+						<ul class="dropdown-menu">
+							<li><a href="#">Action</a></li>
+							<li><a href="#">Another action</a></li>
+							<li><a href="#">Something else here</a></li>
+							<li class="divider"></li>
+							<li><a href="#">Separated link</a></li>
+							<li class="divider"></li>
+							<li><a href="#">One more separated link</a></li>
+						</ul>
+					</li>
+				</ul>
+ -->
+				<span class="pull-right">Last update: {{ lastUpdate ? (lastUpdate | date:'yyyy-MM-dd HH:mm:ss') : '' }}</span>
+			</div>
+
+		</div>
+	</div>
+
+	<div class="container">
+<!--
+		<div uib-alert ng-class="alert-warning" dismiss-on-timeout="5">{{alert.msg}}</div>
+-->
+
 		<div class="row">
 			<div class="col-md-12">
+<!--
 				<div class="media">
 					<span class="media-body">
-		    			<h3>MongoDB Sync Administration</h3>
+		    			<h4>MongoDB Sync Administration</h4>
+					</span>
+					<span class="pull-right">
+						<i class="glyphicon glyphicon-refresh glyphicon-refresh-animate" x-ng-show="isLoading"></i>
+		    			Last update: {{ lastUpdate ? (lastUpdate | date:'yyyy-MM-dd HH:mm:ss') : '' }}
 					</span>
 				</div>
    				<hr>
+-->
 
 				<uib-tabset>
 					<uib-tab active="activeTab == 'settings'">
 						<uib-tab-heading>
-							<b><i class="glyphicon glyphicon-wrench"></i>Sync Settings</b>
+							<i class="glyphicon glyphicon-wrench"></i> Sync Settings
 						</uib-tab-heading>
 						<br>
-						<table class="table table-condensed table-bordered table-hover _table-striped">
+						<table class="table table-bordered table-hover _table-condensed _table-striped">
 							<thead class="bg-primary">
 								<tr>
 									<th class="text-center">SyncName</th>
 									<th class="text-center">Target Index</th>
 									<th class="text-center" style="width:10em">Status</th>
 									<th class="text-center" style="width:16em">Last Sync</th>
-									<th class="text-center col-md-1">Indexed</th>
+									<th class="text-center col-md-1" data-toggle="tooltip" title="indexed last started">Indexed</th>
 									<th class="text-center col-md-2">Action</th>
 									<th class="text-center col-md-1"></th>
 								</tr>
 							</thead>
 							<tbody>
 								<tr x-ng-repeat="(syncName, config) in configs" x-ng-class="{'danger' : config.status.endsWith('FAILED') }">
-									<td class="vert-align">{{ syncName }}</td>
-									<td class="vert-align">{{ config.config.indexName }}</td>
+										<td class="vert-align">{{ syncName }}</td>
+									<td class="vert-align">{{ config.indexName }}</td>
 									<td class="text-center vert-align" style="font-size:1.0em;">
 										<span class="panel-title" x-ng-switch="config.status">
 											<span x-ng-switch-when="RUNNING" class="label label-success">{{config.status}}</span>
@@ -339,31 +399,31 @@ app.controller('MongoSyncCtrl', function ($log, $scope, $resource, $http, $inter
 									<td class="text-right vert-align word-wrap">{{ config.syncCount | number }}</td>
 									<td class="text-center vert-align">
 										<span x-ng-show="config.status != 'RUNNING' && config.status != 'INITIAL_IMPORTING'">
-											<button class="btn btn-sm btn-success" x-ng-click="start(syncName)">
+											<button class="btn btn-xs btn-success" x-ng-click="start(syncName)">
 												<i class="glyphicon glyphicon-play"></i> Start
 											</button>
 										</span>
 										<span x-ng-show="config.status == 'RUNNING' || config.status == 'INITIAL_IMPORTING'">
-											<button class="btn btn-sm btn-danger" x-ng-click="stop(syncName)">
+											<button class="btn btn-xs btn-danger" x-ng-click="stop(syncName)">
 												<i class="glyphicon glyphicon-stop"></i> Stop
 											</button>
 										</span>
 										<span x-ng-show="config.status != 'RUNNING' && config.status != 'INITIAL_IMPORTING'">
-											<button class="btn btn-sm btn-danger" x-ng-click="confirmDelete(syncName)">
+											<button class="btn btn-xs btn-danger" x-ng-click="confirmDelete(syncName)">
 												<i class="glyphicon glyphicon-remove"></i> Delete
 											</button>
 										</span>
 									</td>
 									<td class="text-center vert-align">
-										<div class="btn-group" x-uib-dropdown x-keyboard-nav>
-											<button id="option-menu-{{ syncName}}" type="button" class="btn btn-sm btn-primary" x-uib-dropdown-toggle>
+										<div class="btn-group" x-uib-dropdown x-dropdown-append-to-body x-keyboard-nav>
+											<button id="option-menu" type="button" class="btn btn-xs btn-primary" x-uib-dropdown-toggle>
 												Option <span class="caret"></span>
 											</button>
-											<ul class="dropdown-menu" x-uib-dropdown-menu role="menu" aria-labelledby="option-menu-{{ syncName }}">
-												<li role="menuitem"><a href="#" x-ng-click="showInfo('config', syncName, config.config)">show setting</a></li>
-												<li role="menuitem"><a href="#" x-ng-click="mapping(config.config.indexName)">show mapping</a></li>
+											<ul class="dropdown-menu dropdown-menu-right" x-uib-dropdown-menu role="menu" aria-labelledby="option-menu">
+												<li role="menuitem"><a href="#" x-ng-click="showConfig(syncName)">show setting</a></li>
+												<li role="menuitem"><a href="#" x-ng-click="mapping(config.indexName)">show mapping</a></li>
 												<li class="divider"></li>
-												<li role="menuitem" x-ng-class="{disabled : config.status != 'STOPPED' }"><a href="#" x-ng-click="confirmResync(syncName)"><i class="glyphicon glyphicon-refresh"></i> resync</a></li>
+												<li role="menuitem" x-ng-class="{disabled : config.status != 'STOPPED' }"><a href="#" x-ng-click="confirmResync(syncName)">resync</a></li>
 											</ul>
 										</div>
 									</td>
@@ -374,15 +434,12 @@ app.controller('MongoSyncCtrl', function ($log, $scope, $resource, $http, $inter
 
 					<uib-tab active="activeTab == 'log'">
 						<uib-tab-heading>
-							<b><i class="glyphicon glyphicon-th-list"></i>Last Log</b>
+							<i class="glyphicon glyphicon-th-list"></i> Last Log
 						</uib-tab-heading>
 						<br>
-	  					<table class="table table-condensed _table-striped table-hover _table-bordered">
+	  					<table class="table table-condensed table-hover _table-striped _table-bordered">
 							<thead class="bg-primary">
 								<tr>
-<!--
-									<th class="text-center" style="width:1px;">No.</th>
--->
 									<th class="text-center" style="width:1px;">time</th>
 									<th class="text-center" style="width:1px;">level</th>
 									<th class="text-center">message</th>
@@ -390,9 +447,6 @@ app.controller('MongoSyncCtrl', function ($log, $scope, $resource, $http, $inter
 							</thead>
 							<tbody>
 								<tr x-ng-repeat="line in logs" x-ng-class="{'danger' : line.level == 'ERROR', 'warning' : line.level == 'WARN'}">
-<!--
-									<td class="text-right text-nowrap">{{ $index + 1 }}</td>
--->
 		  							<td class="text-right text-nowrap">{{ line.timestamp | date: 'yyyy/MM/dd HH:mm:ss.sss' }}</td>
 									<td class="text-nowrap">{{ line.level }}</td>
 									<td style="word-break:break-all">{{ line.message }}</td>
@@ -404,13 +458,13 @@ app.controller('MongoSyncCtrl', function ($log, $scope, $resource, $http, $inter
 					<!-- refresh button -->
 				    <div class="btn-group pull-right" x-uib-dropdown x-keyboard-nav>
 						<button id="split-button" type="button" class="btn btn-sm btn-primary" x-ng-click="reload();">
-							<u>R</u>efresh {{ refreshInterval }} <i class="glyphicon glyphicon-refresh glyphicon-refresh-animate" x-ng-show="isLoading"></i>
+							<u>R</u>efresh {{ refreshInterval }}
 						</button>
 						<button type="button" class="btn btn-sm btn-primary" x-uib-dropdown-toggle>
 							<span class="caret"></span>
 							<span class="sr-only">Split button!</span>
 						</button>
-						<ul class="dropdown-menu" x-uib-dropdown-menu role="menu" aria-labelledby="split-button">
+						<ul class="dropdown-menu dropdown-menu-right" x-uib-dropdown-menu role="menu" aria-labelledby="split-button">
 							<li role="menuitem"><a href="#" x-ng-click="setReload(0)">Manual Refresh</a></li>
 							<li role="menuitem"><a href="#" x-ng-click="setReload(2000)">Refresh every 2 seconds</a></li>
 							<li role="menuitem"><a href="#" x-ng-click="setReload(5000)">Refresh every 5 seconds</a></li>

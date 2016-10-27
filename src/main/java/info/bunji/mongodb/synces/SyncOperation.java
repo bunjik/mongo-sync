@@ -21,8 +21,6 @@ import java.util.Date;
 import org.bson.BsonTimestamp;
 import org.bson.Document;
 import org.joda.time.DateTime;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
@@ -37,7 +35,7 @@ import com.google.gson.JsonSerializer;
  */
 public class SyncOperation {
 
-	private static final Logger logger = LoggerFactory.getLogger(SyncOperation.class);
+	//private static final Logger logger = LoggerFactory.getLogger(SyncOperation.class);
 
 	private final Operation op;
 	private final String index;

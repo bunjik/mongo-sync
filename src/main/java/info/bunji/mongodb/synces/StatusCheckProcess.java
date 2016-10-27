@@ -22,7 +22,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
-import java.util.Objects;
 import java.util.TreeMap;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
@@ -113,8 +112,10 @@ public class StatusCheckProcess extends AsyncProcess<Boolean> implements Indexer
 	}
 
 	/**
+	 **********************************
 	 *
 	 * @return
+	 **********************************
 	 */
 	public Map<String, SyncConfig> getConfigList() {
 		SearchResponse res = esClient.prepareSearch(SyncConfig.STATUS_INDEX)
@@ -214,104 +215,6 @@ public class StatusCheckProcess extends AsyncProcess<Boolean> implements Indexer
 						//indexerMap.remove(entry.getKey());
 					}
 				}
-/***
-				// esからステータスを取得
-				SearchResponse res = esClient.prepareSearch(SyncConfig.STATUS_INDEX)
-										.setTypes("status", "config")
-										.setSize(1000)
-										.execute()
-										.actionGet();
-
-				Map<String, SyncConfig> tmpConfigs = new HashMap<>();
-				Map<String, SyncStatus> tmpStatus = new HashMap<>();
-
-				SearchHits hits = res.getHits();
-				for (SearchHit hit : hits.getHits()) {
-					String id = hit.getId();
-					String type = hit.getType();
-
-					if (type.equals("config")) {
-						// config
-						SyncConfig config = gson.fromJson(hit.getSourceAsString(), SyncConfig.class);
-						//logger.debug(config.toString());
-						config.setSyncName(id);
-						tmpConfigs.put(id, config);
-					} else {
-						// status
-						SyncStatus status = new SyncStatus(hit.getSource());
-						//logger.debug(status.toString());
-						tmpStatus.put(id, status);
-					}
-				}
-
-				// TODO 要見直し
-				for (Entry<String, SyncConfig> entry : tmpConfigs.entrySet()) {
-					String syncName = entry.getKey();
-					SyncConfig config = entry.getValue();
-
-					CollectionExtractor extractor = null;
-
-					if (!tmpStatus.containsKey(syncName)) {
-						if (!indexerMap.containsKey(syncName)) {
-							// 初期インポート(config != null && status == null)
-							if (!EsUtils.isExistsIndex(esClient, config.getIndexName())) {
-								extractor = new CollectionExtractor(config, null);
-								config.setStatus(Status.STARTING);
-							} else {
-								// インポート対象のインデックスが存在
-								logger.error("import index already exists.[" + config.getIndexName() + "]");
-								esClient.update(EsUtils.makeStatusRequest(config, Status.START_FAILED, null));
-								config.setStatus(Status.INITIAL_IMPORT_FAILED);
-							}
-						}
-					} else {
-						// config != null && status != null
-						IndexerProcess indexer = indexerMap.get(syncName);
-						SyncStatus statusInfo = tmpStatus.get(syncName);
-						if (indexer == null) {
-							if (Status.RUNNING.equals(statusInfo.getStatus())) {
-								// 起動時の再開
-								config.addSyncCount(-1);
-								extractor = new CollectionExtractor(config, statusInfo.getLastOpTime());
-							}
-						} else {
-							if (!Status.RUNNING.equals(statusInfo.getStatus())
-								&& !Status.INITIAL_IMPORTING.equals(statusInfo.getStatus())
-								&& !Status.STARTING.equals(statusInfo.getStatus())) {
-								// 実行中処理の停止
-								logger.debug("indexer stopping.[" + syncName + "]");
-								indexer.stop();
-								indexerMap.remove(syncName);
-							}
-						}
-					}
-
-					if (extractor != null) {
-						// 同期処理の開始
-						BsonTimestamp ts = null;
-						if (tmpStatus.containsKey(syncName)) {
-							ts = tmpStatus.get(syncName).getLastOpTime();
-						}
-						List<AsyncProcess<SyncOperation>> procList = new ArrayList<>();
-						if (ts == null) {
-							procList.add(extractor);
-						}
-						procList.add(new OplogExtractor(config, ts));
-						IndexerProcess indexerProc = new IndexerProcess(esClient, config, this,
-															AsyncExecutor.execute(procList, 1, 5000));
-						AsyncExecutor.execute(indexerProc);
-						indexerMap.put(syncName, indexerProc);
-					}
-				}
-
-				// configの存在しないindexerは停止する
-				for (Entry<String, IndexerProcess> entry : indexerMap.entrySet()) {
-					if (!tmpConfigs.containsKey(entry.getKey())) {
-						entry.getValue().stop();
-						//indexerMap.remove(entry.getKey());
-					}
-				}
-***/
 			} catch (IndexNotFoundException infe) {
 				// setting index not found.
 			} catch (Exception e) {
@@ -348,7 +251,7 @@ public class StatusCheckProcess extends AsyncProcess<Boolean> implements Indexer
 	public boolean startIndexer(String syncName) {
 		String json = EsUtils.makeStatusJson(Status.RUNNING, null, null);
 		UpdateRequest req = new UpdateRequest(SyncConfig.STATUS_INDEX, "status", syncName)
-				.doc(json).consistencyLevel(WriteConsistencyLevel.ALL);
+				.doc(json).consistencyLevel(WriteConsistencyLevel.DEFAULT);
 		// ステータス更新
 		esClient.update(req).actionGet();
 		// インデックスのリフレッシュ
@@ -372,7 +275,7 @@ public class StatusCheckProcess extends AsyncProcess<Boolean> implements Indexer
 		}
 		String json = EsUtils.makeStatusJson(Status.STOPPED, count, null);
 		UpdateRequest req = new UpdateRequest(SyncConfig.STATUS_INDEX, "status", syncName)
-				.doc(json).consistencyLevel(WriteConsistencyLevel.ALL);
+				.doc(json).consistencyLevel(WriteConsistencyLevel.DEFAULT);
 		// ステータス更新
 		esClient.update(req).actionGet();
 		// インデックスのリフレッシュ
@@ -393,7 +296,7 @@ public class StatusCheckProcess extends AsyncProcess<Boolean> implements Indexer
 		BulkRequest bulkReq = BulkAction.INSTANCE.newRequestBuilder(esClient)
 						.add(new DeleteRequest(SyncConfig.STATUS_INDEX).type("config").id(syncName))
 						.add(new DeleteRequest(SyncConfig.STATUS_INDEX).type("status").id(syncName))
-						.setConsistencyLevel(WriteConsistencyLevel.ALL)
+						.setConsistencyLevel(WriteConsistencyLevel.DEFAULT)
 						.request();
 		esClient.bulk(bulkReq).actionGet();
 		// インデックスのリフレッシュ
@@ -466,21 +369,16 @@ public class StatusCheckProcess extends AsyncProcess<Boolean> implements Indexer
 	private static final class SyncStatus {
 		private Status status;
 		private BsonTimestamp lastOpTime;
-//		private long indexCnt;
 		private String lastError;
 
 		public SyncStatus(Map<String, Object> map) {
-			this.status = Status.valueOf(Objects.toString(map.get("status"), ""));
+			this.status = Status.fromString(map.get("status"));
 			Map<String, Number> ts = (Map<String, Number>) map.get("lastOpTime");
 			if (ts != null) {
 				int sec = ts.get("seconds").intValue();
 				int inc = ts.get("inc").intValue();
 				this.lastOpTime = new BsonTimestamp(sec, inc);
 			}
-//			try {
-//				this.setIndexCnt(Long.valueOf(map.get("indexCnt").toString()));
-//			} catch (Exception e) {
-//			}
 		}
 
 		public Status getStatus() {
@@ -491,9 +389,9 @@ public class StatusCheckProcess extends AsyncProcess<Boolean> implements Indexer
 			return lastOpTime;
 		}
 
-		public String toJson() {
-			return EsUtils.makeStatusJson(status, null, lastOpTime);
-		}
+//		public String toJson() {
+//			return EsUtils.makeStatusJson(status, null, lastOpTime);
+//		}
 
 		public String getLastError() {
 			return lastError;

@@ -15,5 +15,16 @@ public enum Status {
     STOPPED,
     IMPORT_FAILED,
     INITIAL_IMPORTING,
-    INITIAL_IMPORT_FAILED,
+    INITIAL_IMPORT_FAILED;
+
+    public static final Status fromString(Object status) {
+		Status ret = Status.UNKNOWN;
+		for (Status s : values()) {
+			if (s.toString().equals(status)) {
+				ret = s;
+				break;
+			}
+		}
+		return ret;
+	}
 }
