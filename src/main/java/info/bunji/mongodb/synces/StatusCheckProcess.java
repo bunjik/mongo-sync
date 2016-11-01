@@ -167,16 +167,13 @@ public class StatusCheckProcess extends AsyncProcess<Boolean> implements Indexer
 							if (!EsUtils.isExistsIndex(esClient, config.getIndexName())) {
 								extractor = new CollectionExtractor(config, null);
 								esClient.update(EsUtils.makeStatusRequest(config, Status.STARTING, null));
-//								config.setStatus(Status.STARTING);
 							} else {
 								// インポート対象のインデックスが存在
 								logger.error("[{}] import index already exists.[index:{}]", syncName, config.getIndexName());
 								esClient.update(EsUtils.makeStatusRequest(config, Status.INITIAL_IMPORT_FAILED, null));
-//								config.setStatus(Status.INITIAL_IMPORT_FAILED);
 							}
 						} else if (Status.RUNNING == config.getStatus()) {
 							// 起動時の再開
-//							extractor = new CollectionExtractor(config, config.getLastOpTime());
 							extractor = new OplogExtractor(config, config.getLastOpTime());
 						}
 					} else {

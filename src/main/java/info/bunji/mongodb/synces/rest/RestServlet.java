@@ -25,6 +25,7 @@ import javax.servlet.http.HttpServlet;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 
+import org.elasticsearch.client.transport.NoNodeAvailableException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -61,7 +62,7 @@ public class RestServlet extends HttpServlet {
 				results.put("results", process.getConfigList());
 				JSON.encode(results, os);
 			} else if (params[1].equals("config") && params.length >= 3) {
-//				results.put("results", process.getConfigList().get(params[2]));
+				//results.put("results", process.getConfigList().get(params[2]));
 				JSON.encode(process.getConfigList().get(params[2]), os);
 			} else if (params[1].equals("mapping") && params.length >= 3) {
 				res.setStatus(HttpServletResponse.SC_OK);
@@ -72,6 +73,9 @@ public class RestServlet extends HttpServlet {
 				res.setStatus(HttpServletResponse.SC_BAD_REQUEST);
 			}
 			os.flush();
+		} catch (NoNodeAvailableException nnae) {
+			//logger.error(e.getMessage(), e);
+			res.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
 		} catch (Exception e) {
 			logger.error(e.getMessage(), e);
 			res.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);

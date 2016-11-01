@@ -217,7 +217,6 @@ app.controller('MongoSyncCtrl', function ($log, $scope, $resource, $http, $inter
 //				delete value['syncCount'];
 //				delete value['lastOptime'];
 //			});
-			$scope.lastUpdate = new Date();
 		});
 	};
 
@@ -288,6 +287,7 @@ app.controller('MongoSyncCtrl', function ($log, $scope, $resource, $http, $inter
 		$scope.list();
 		$scope.getLog();
 		$scope.isLoading = false;
+		$scope.lastUpdate = new Date();
 	}
 
 	$scope.setReload = function(interval) {
@@ -308,8 +308,7 @@ app.controller('MongoSyncCtrl', function ($log, $scope, $resource, $http, $inter
 		return value;
 	};
 
-	$scope.list();
-	$scope.getLog();
+	$scope.reload();
 });
 </script>
 </head>

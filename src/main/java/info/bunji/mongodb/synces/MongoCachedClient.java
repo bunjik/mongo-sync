@@ -39,13 +39,13 @@ class MongoCachedClient extends MongoClient {
 
 	private Logger logger = LoggerFactory.getLogger(getClass());
 
-	private AtomicInteger refCount = new AtomicInteger(0);
+	private final AtomicInteger refCount = new AtomicInteger(1);
 
 	private final ClientCacheKey cacheKey;
 
 	private final Set<Listener> listeners = new HashSet<>();
 
-	private Object lock = new Object();
+	private final Object lock = new Object();
 
 	/**
 	 **********************************
@@ -90,18 +90,11 @@ class MongoCachedClient extends MongoClient {
 	 **********************************
 	 */
 	int addRefCount() {
-		synchronized (lock) {
-			int cnt = refCount.incrementAndGet();
-	//		logger.trace("increment mongoClient ref=" + cnt);
-			return cnt;
-			//return refCount.incrementAndGet();
-		}
+		return refCount.incrementAndGet();
 	}
 
 	int getRefCount() {
-		synchronized (lock) {
-			return refCount.get();
-		}
+		return refCount.get();
 	}
 
 	/*
@@ -112,17 +105,9 @@ class MongoCachedClient extends MongoClient {
 	 */
 	@Override
 	public void close() {
-		synchronized (lock) {
-			if (refCount.decrementAndGet() <= 0) {
-				// 参照数が0になったらcloseする
-				logger.trace("close real mongoClient");
-				for (Listener listener : listeners) {
-					listener.onCloseClient(cacheKey);
-				}
-				super.close();
-			} else {
-//				logger.trace("decrement mongoClient ref="+refCount.get());
-			}
+		refCount.decrementAndGet();
+		for (Listener listener : listeners) {
+			listener.onCloseClient(cacheKey);
 		}
 	}
 
@@ -130,12 +115,11 @@ class MongoCachedClient extends MongoClient {
 	 ******************************
 	 * 参照数に関わらずクローズする.
 	 * <br>
+	 * このメソッドでのクローズ時はListenerへの通知は行われません。
 	 ******************************
 	 */
 	void forceClose() {
-		for (Listener listener : listeners) {
-			listener.onCloseClient(cacheKey);
-		}
+		logger.trace("close real mongoClient");
 		super.close();
 	}
 

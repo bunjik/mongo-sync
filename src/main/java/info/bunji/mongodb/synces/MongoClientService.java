@@ -55,18 +55,18 @@ public class MongoClientService implements MongoCachedClient.Listener {
 	static MongoClient getClient(SyncConfig config) throws UnknownHostException {
 		MongoCachedClient client;
 		synchronized (mongoClients) {
-logger.trace("bgn getClient()");
 			ClientCacheKey cacheKey = new ClientCacheKey(config);
 			boolean isValidConnection = false;
 			client = mongoClients.get(cacheKey);
 			if (client != null) {
 				try {
 					// validate client
+					client.addRefCount();
 					client.listDatabaseNames();
 					isValidConnection = true;
 				} catch (Exception me) {
 					// needs reconnect
-					//mongoClients.remove(cacheKey);
+					mongoClients.remove(cacheKey);
 					client.forceClose();
 				}
 			}
@@ -103,10 +103,9 @@ logger.trace("bgn getClient()");
 				client.addListener(_instance);
 
 				mongoClients.put(cacheKey, client);
+			} else {
+				logger.trace("get mongoClient from cache");
 			}
-
-			client.addRefCount();
-logger.trace("end getClient()");
 		}
 
 		return client;
@@ -118,11 +117,11 @@ logger.trace("end getClient()");
 	 **********************************
 	 */
 	static void closeAllClient() {
-//		synchronized (mongoClients) {
+		synchronized (mongoClients) {
 			for (MongoCachedClient client : mongoClients.values()) {
 				client.forceClose();
 			}
-//		}
+		}
 	}
 
 	/*
@@ -131,19 +130,19 @@ logger.trace("end getClient()");
 	 */
 	@Override
 	public void onCloseClient(ClientCacheKey cacheKey) {
-//		synchronized (mongoClients) {
-logger.trace("bgn onCloseClient()");
-			//mongoClients.remove(cacheKey);
+		synchronized (mongoClients) {
 			MongoCachedClient client = mongoClients.get(cacheKey);
 			if (client != null && client.getRefCount() <= 0) {
 				mongoClients.remove(cacheKey);
+				client.forceClose();
 			}
-logger.trace("end onCloseClient()");
-//		}
+		}
 	}
 
 	/**
+	 **********************************
 	 *
+	 **********************************
 	 */
 	static class ClientCacheKey {
 		private MongoConnection connInfo;
