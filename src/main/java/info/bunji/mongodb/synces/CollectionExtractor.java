@@ -76,16 +76,19 @@ public class CollectionExtractor extends AsyncProcess<SyncOperation> {
 		Set<String> includeFields = config.getIncludeFields();
 		Set<String> excludeFields = config.getExcludeFields();
 		String index = config.getIndexName();
+		String syncName = config.getSyncName();
 
 		// 初期インポート処理
 		try (MongoClient client = MongoClientService.getClient(config)) {
 			if (timestamp == null) {
-				logger.info("[{}] start initial import from db [{}]", config.getSyncName(), config.getMongoDbName());
+				logger.info("[{}] start initial import from db [{}]", syncName, config.getMongoDbName());
 
 				// 処理開始時点のoplogの最終タイムスタンプを取得しておく
 				MongoCollection<Document> oplog  = client.getDatabase("local").getCollection("oplog.rs");
 				Document lastOp = oplog.find().sort(new BasicDBObject("$natural", -1)).limit(1).first();
 				BsonTimestamp lastOpTs = lastOp.get("ts", BsonTimestamp.class);
+
+				logger.debug("[{}] current oplog timestamp = [{}]", syncName, lastOpTs.toString());
 
 				// 同期対象コレクション名の一覧を取得する
 				MongoDatabase db = client.getDatabase(config.getMongoDbName());
@@ -97,7 +100,7 @@ public class CollectionExtractor extends AsyncProcess<SyncOperation> {
 				// コレクション毎に初期同期を行う
 				Object lastId = null;
 				for (String collection : getTargetColectionList(db)) {
-					logger.info("[{}] start initial import. [{}]", config.getSyncName(), collection);
+					logger.info("[{}] start initial import. [{}]", syncName, collection);
 
 					MongoCollection<Document> conn = db.getCollection(collection);
 					BasicDBObject filter = getFilterForInitialImport(new BasicDBObject(), lastId);
@@ -110,21 +113,21 @@ public class CollectionExtractor extends AsyncProcess<SyncOperation> {
 					for (Document doc : results) {
 						Document filteredDoc = DocumentUtils.applyFieldFilter(doc, includeFields, excludeFields);
 						append(new SyncOperation(Operation.INSERT, index, collection, filteredDoc, null));
-//						lastId = doc.get("_id");
 						if ((++processed % LOGGING_INTERVAL) == 0) {
-							logger.info("processing initial import. [{}({}/{})]", collection, processed, count);
+							logger.info("[{}] processing initial import. [{}({}/{})]", syncName, collection, processed, count);
 						}
 					}
-					logger.info("[{}] initial import finished. [{}(total:{})]", config.getSyncName(), collection, processed);
+					logger.info("[{}] initial import finished. [{}(total:{})]", syncName, collection, processed);
 				}
 
 				// update status
 				statusDoc = DocumentUtils.makeStatusDocument(Status.RUNNING, null, lastOpTs);
 				append(new SyncOperation(Operation.UPDATE, "status", statusDoc, config.getSyncName()));
 			}
+			logger.info("[{}] extract collection finished.", syncName);
 		} catch (Throwable t) {
 			config.setStatus(Status.INITIAL_IMPORT_FAILED);
-			logger.error("[{}] initial import failed.({})", config.getSyncName(), t.getMessage(), t);
+			logger.error("[{}] initial import failed.({})", syncName, t.getMessage(), t);
 			throw t;
 		}
 	}
@@ -179,6 +182,6 @@ public class CollectionExtractor extends AsyncProcess<SyncOperation> {
 	@Override
 	protected void postProcess() {
 		super.postProcess();
-		logger.info("[{}] extract collection finished.", config.getSyncName());
+		//logger.info("[{}] extract collection finished.", config.getSyncName());
 	}
 }

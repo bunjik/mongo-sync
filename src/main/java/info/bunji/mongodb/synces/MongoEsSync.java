@@ -109,13 +109,6 @@ public class MongoEsSync {
 				.build()
 				.addTransportAddresses(addresses.toArray(new InetSocketTransportAddress[0]));
 
-//		int faildShared;
-//		do {
-//
-//			faildShared = esClient.admin().indices().prepareStats(SyncConfig.STATUS_INDEX).get().getFailedShards();
-//			Thread.sleep(3000);
-//		} while (faildShared > 0);
-
 		StatusCheckProcess process = new StatusCheckProcess(esClient, CHECK_INTERVAL);
 
 		String serverPort = prop.getProperty("server.port", DEFAULT_PORT);

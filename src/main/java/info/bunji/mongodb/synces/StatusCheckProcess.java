@@ -15,10 +15,8 @@
  */
 package info.bunji.mongodb.synces;
 
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.EventListener;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
@@ -30,22 +28,18 @@ import org.apache.commons.lang3.builder.ToStringBuilder;
 import org.apache.commons.lang3.builder.ToStringStyle;
 import org.bson.BsonTimestamp;
 import org.elasticsearch.action.WriteConsistencyLevel;
-import org.elasticsearch.action.admin.indices.mapping.get.GetMappingsResponse;
 import org.elasticsearch.action.bulk.BulkAction;
 import org.elasticsearch.action.bulk.BulkRequest;
 import org.elasticsearch.action.delete.DeleteRequest;
 import org.elasticsearch.action.search.SearchResponse;
 import org.elasticsearch.action.update.UpdateRequest;
 import org.elasticsearch.client.Client;
-import org.elasticsearch.cluster.metadata.MappingMetaData;
-import org.elasticsearch.common.collect.ImmutableOpenMap;
+import org.elasticsearch.client.transport.NoNodeAvailableException;
 import org.elasticsearch.index.IndexNotFoundException;
 import org.elasticsearch.search.SearchHit;
 import org.elasticsearch.search.sort.SortBuilders;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import com.carrotsearch.hppc.cursors.ObjectObjectCursor;
 
 import info.bunji.asyncutil.AsyncExecutor;
 import info.bunji.asyncutil.AsyncProcess;
@@ -83,6 +77,13 @@ public class StatusCheckProcess extends AsyncProcess<Boolean> implements Indexer
 		this.checkInterval = checkInterval;
 	}
 
+	/**
+	 **********************************
+	 *
+	 * @param syncName
+	 * @return
+	 **********************************
+	 */
 	public boolean isRunning(String syncName) {
 		return indexerMap.containsKey(syncName);
 	}
@@ -95,20 +96,7 @@ public class StatusCheckProcess extends AsyncProcess<Boolean> implements Indexer
 	 **********************************
 	 */
 	public Map<String, Object> getMapping(String indexName) {
-		GetMappingsResponse res = esClient.admin().indices()
-							.prepareGetMappings(indexName)
-							.execute().actionGet();
-
-		Map<String,Object> result = new LinkedHashMap<>();
-		ImmutableOpenMap<String, MappingMetaData> mapping = res.getMappings().get(indexName);
-		for (ObjectObjectCursor<String, MappingMetaData> o : mapping) {
-			try {
-				result.put(o.key, o.value.sourceAsMap());
-			} catch (IOException ioe) {
-				//ioe.printStackTrace();
-			}
-		}
-		return result;
+		return EsUtils.getMapping(esClient, indexName);
 	}
 
 	/**
@@ -124,6 +112,12 @@ public class StatusCheckProcess extends AsyncProcess<Boolean> implements Indexer
 				.setSize(1000)
 				.execute()
 				.actionGet();
+
+		// failed shards check
+		if (res.getFailedShards() > 0) {
+			logger.trace("failure shards found in config index.");
+			throw new IndexNotFoundException("failed shards found.");
+		}
 
 		Map<String, SyncConfig> configMap = new TreeMap<>();
 		for (SearchHit hit : res.getHits().getHits()) {
@@ -153,6 +147,9 @@ public class StatusCheckProcess extends AsyncProcess<Boolean> implements Indexer
 	@Override
 	protected void execute() throws Exception {
 
+		long interval = checkInterval;
+		int retry = 0;
+
 		while (!isInterrupted()) {
 			try {
 				// esからステータスを取得
@@ -161,37 +158,42 @@ public class StatusCheckProcess extends AsyncProcess<Boolean> implements Indexer
 					String syncName = entry.getKey();
 					SyncConfig config = entry.getValue();
 
-					CollectionExtractor extractor = null;
+					//CollectionExtractor extractor = null;
+					AsyncProcess<SyncOperation> extractor = null;
 					IndexerProcess indexer = indexerMap.get(syncName);
 					if (indexer == null) {
 						if (config.getStatus() == null) {
 							// initial import
 							if (!EsUtils.isExistsIndex(esClient, config.getIndexName())) {
 								extractor = new CollectionExtractor(config, null);
-								config.setStatus(Status.STARTING);
+								esClient.update(EsUtils.makeStatusRequest(config, Status.STARTING, null));
+//								config.setStatus(Status.STARTING);
 							} else {
 								// インポート対象のインデックスが存在
-								logger.error("import index already exists.[" + config.getIndexName() + "]");
-								esClient.update(EsUtils.makeStatusRequest(config, Status.START_FAILED, null));
-								config.setStatus(Status.INITIAL_IMPORT_FAILED);
+								logger.error("[{}] import index already exists.[index:{}]", syncName, config.getIndexName());
+								esClient.update(EsUtils.makeStatusRequest(config, Status.INITIAL_IMPORT_FAILED, null));
+//								config.setStatus(Status.INITIAL_IMPORT_FAILED);
 							}
 						} else if (Status.RUNNING == config.getStatus()) {
 							// 起動時の再開
-							extractor = new CollectionExtractor(config, config.getLastOpTime());
+//							extractor = new CollectionExtractor(config, config.getLastOpTime());
+							extractor = new OplogExtractor(config, config.getLastOpTime());
 						}
 					} else {
-						switch (config.getStatus()) {
-						case INITIAL_IMPORT_FAILED :
-						case STOPPED :
-							// stop indexer
-							logger.debug("indexer stopping.[" + syncName + "]");
-							indexer.stop();
-							indexerMap.remove(syncName);
-							break;
+						if (config.getStatus() != null) {
+							switch (config.getStatus()) {
+							case INITIAL_IMPORT_FAILED :
+							case STOPPED :
+								// stop indexer
+								logger.debug("[{}] stopping indexer.", syncName);
+								indexer.stop();
+								indexerMap.remove(syncName);
+								break;
 
-						default :
-							// do nothing.
-							break;
+							default :
+								// do nothing.
+								break;
+							}
 						}
 					}
 
@@ -200,7 +202,9 @@ public class StatusCheckProcess extends AsyncProcess<Boolean> implements Indexer
 						BsonTimestamp ts = config.getLastOpTime();
 						List<AsyncProcess<SyncOperation>> procList = new ArrayList<>();
 						procList.add(extractor);
-						procList.add(new OplogExtractor(config, ts));
+						if (extractor instanceof CollectionExtractor) {
+							procList.add(new OplogExtractor(config, ts));
+						}
 						IndexerProcess indexerProc = new IndexerProcess(esClient, config, this,
 															AsyncExecutor.execute(procList, 1, 5000));
 						indexerMap.put(syncName, indexerProc);
@@ -215,15 +219,25 @@ public class StatusCheckProcess extends AsyncProcess<Boolean> implements Indexer
 						//indexerMap.remove(entry.getKey());
 					}
 				}
+
+				retry = 0;
+				interval = checkInterval;
+
 			} catch (IndexNotFoundException infe) {
 				// setting index not found.
+
+			} catch (NoNodeAvailableException nnae) {
+//			} catch (ElasticsearchException ee) {
+				retry++;
+				interval = (long) Math.min(60, Math.pow(2, retry)) * 1000;
+				logger.warn("es connection error. (retry after {} ms)", interval);
 			} catch (Exception e) {
 				//logger.error(e.getMessage(), e);
 				logger.error(e.getMessage());
 			}
 
 			// wait next check.
-			Thread.sleep(checkInterval);
+			Thread.sleep(interval);
 		}
 	}
 

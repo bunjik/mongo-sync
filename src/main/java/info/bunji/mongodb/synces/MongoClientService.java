@@ -13,6 +13,8 @@ import java.util.Objects;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.builder.ToStringBuilder;
 import org.apache.commons.lang3.builder.ToStringStyle;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import com.mongodb.MongoClient;
 import com.mongodb.MongoClientOptions;
@@ -29,9 +31,9 @@ import info.bunji.mongodb.synces.SyncConfig.ServerInfo;
  */
 public class MongoClientService implements MongoCachedClient.Listener {
 
-	//private static final Logger logger = LoggerFactory.getLogger(MongoClientService.class);
+	private static final Logger logger = LoggerFactory.getLogger(MongoClientService.class);
 
-	private static final Map<ClientCacheKey, MongoCachedClient> mongoClients = new HashMap<>();
+	private static Map<ClientCacheKey, MongoCachedClient> mongoClients = new HashMap<>();
 
 	private static MongoClientService _instance = new MongoClientService();
 
@@ -53,6 +55,7 @@ public class MongoClientService implements MongoCachedClient.Listener {
 	static MongoClient getClient(SyncConfig config) throws UnknownHostException {
 		MongoCachedClient client;
 		synchronized (mongoClients) {
+logger.trace("bgn getClient()");
 			ClientCacheKey cacheKey = new ClientCacheKey(config);
 			boolean isValidConnection = false;
 			client = mongoClients.get(cacheKey);
@@ -63,7 +66,7 @@ public class MongoClientService implements MongoCachedClient.Listener {
 					isValidConnection = true;
 				} catch (Exception me) {
 					// needs reconnect
-					mongoClients.remove(cacheKey);
+					//mongoClients.remove(cacheKey);
 					client.forceClose();
 				}
 			}
@@ -86,6 +89,7 @@ public class MongoClientService implements MongoCachedClient.Listener {
 				MongoClientOptions option = MongoClientOptions.builder()
 											.socketKeepAlive(true)
 											.readPreference(ReadPreference.primaryPreferred())
+//											.alwaysUseMBeans(true)
 											.connectionsPerHost(100).build();
 
 				// TODO sharding未対応
@@ -94,8 +98,6 @@ public class MongoClientService implements MongoCachedClient.Listener {
 				} else {
 					client = new MongoCachedClient(cacheKey, seeds, credentialList, option);
 				}
-				// check conection;
-				client.listDatabaseNames();
 
 				// イベントリスナの追加
 				client.addListener(_instance);
@@ -104,7 +106,9 @@ public class MongoClientService implements MongoCachedClient.Listener {
 			}
 
 			client.addRefCount();
+logger.trace("end getClient()");
 		}
+
 		return client;
 	}
 
@@ -114,11 +118,11 @@ public class MongoClientService implements MongoCachedClient.Listener {
 	 **********************************
 	 */
 	static void closeAllClient() {
-		synchronized (mongoClients) {
+//		synchronized (mongoClients) {
 			for (MongoCachedClient client : mongoClients.values()) {
 				client.forceClose();
 			}
-		}
+//		}
 	}
 
 	/*
@@ -127,7 +131,15 @@ public class MongoClientService implements MongoCachedClient.Listener {
 	 */
 	@Override
 	public void onCloseClient(ClientCacheKey cacheKey) {
-		mongoClients.remove(cacheKey);
+//		synchronized (mongoClients) {
+logger.trace("bgn onCloseClient()");
+			//mongoClients.remove(cacheKey);
+			MongoCachedClient client = mongoClients.get(cacheKey);
+			if (client != null && client.getRefCount() <= 0) {
+				mongoClients.remove(cacheKey);
+			}
+logger.trace("end onCloseClient()");
+//		}
 	}
 
 	/**

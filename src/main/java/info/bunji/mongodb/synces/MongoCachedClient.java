@@ -39,11 +39,13 @@ class MongoCachedClient extends MongoClient {
 
 	private Logger logger = LoggerFactory.getLogger(getClass());
 
-	private final AtomicInteger refCount = new AtomicInteger(0);
+	private AtomicInteger refCount = new AtomicInteger(0);
 
 	private final ClientCacheKey cacheKey;
 
 	private final Set<Listener> listeners = new HashSet<>();
+
+	private Object lock = new Object();
 
 	/**
 	 **********************************
@@ -59,6 +61,8 @@ class MongoCachedClient extends MongoClient {
 							MongoClientOptions options) {
 		super(seeds, credentialsList, options);
 		this.cacheKey = cacheKey;
+
+		logger.trace("open real mongoClient");
 	}
 
 	/**
@@ -75,6 +79,8 @@ class MongoCachedClient extends MongoClient {
 							MongoClientOptions options) {
 		super(server, credentialsList, options);
 		this.cacheKey = cacheKey;
+
+		logger.trace("open real mongoClient");
 	}
 
 	/**
@@ -84,7 +90,18 @@ class MongoCachedClient extends MongoClient {
 	 **********************************
 	 */
 	int addRefCount() {
-		return refCount.incrementAndGet();
+		synchronized (lock) {
+			int cnt = refCount.incrementAndGet();
+	//		logger.trace("increment mongoClient ref=" + cnt);
+			return cnt;
+			//return refCount.incrementAndGet();
+		}
+	}
+
+	int getRefCount() {
+		synchronized (lock) {
+			return refCount.get();
+		}
 	}
 
 	/*
@@ -95,12 +112,16 @@ class MongoCachedClient extends MongoClient {
 	 */
 	@Override
 	public void close() {
-		if (refCount.decrementAndGet() <= 0) {
-			// 参照数が0になったらcloseする
-			logger.trace("closing real mongoClient");
-			forceClose();
-			for (Listener listener : listeners) {
-				listener.onCloseClient(cacheKey);
+		synchronized (lock) {
+			if (refCount.decrementAndGet() <= 0) {
+				// 参照数が0になったらcloseする
+				logger.trace("close real mongoClient");
+				for (Listener listener : listeners) {
+					listener.onCloseClient(cacheKey);
+				}
+				super.close();
+			} else {
+//				logger.trace("decrement mongoClient ref="+refCount.get());
 			}
 		}
 	}
@@ -109,10 +130,12 @@ class MongoCachedClient extends MongoClient {
 	 ******************************
 	 * 参照数に関わらずクローズする.
 	 * <br>
-	 * このメソッドによりクローズした場合は、イベントによる通知は行われません。
 	 ******************************
 	 */
 	void forceClose() {
+		for (Listener listener : listeners) {
+			listener.onCloseClient(cacheKey);
+		}
 		super.close();
 	}
 

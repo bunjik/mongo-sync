@@ -76,6 +76,7 @@ public class OplogExtractor extends AsyncProcess<SyncOperation> {
 		Set<String> includeFields = config.getIncludeFields();
 		Set<String> excludeFields = config.getExcludeFields();
 		String index = config.getIndexName();
+		String syncName = config.getSyncName();
 
 		// oplogからの取得処理
 		int retryCnt = 0;
@@ -83,7 +84,7 @@ public class OplogExtractor extends AsyncProcess<SyncOperation> {
 			try (MongoClient client = MongoClientService.getClient(config)) {
 				retryCnt = 0;
 
-				logger.debug("[" + config.getSyncName() + "] start oplog sync.");
+				logger.debug("[{}] start oplog extractor.", syncName);
 
 				// check oplog timestamp outdated
 				MongoCollection<Document> oplogCollection = client.getDatabase("local").getCollection("oplog.rs");
@@ -92,12 +93,13 @@ public class OplogExtractor extends AsyncProcess<SyncOperation> {
 					results = oplogCollection
 							.find()
 							.filter(Filters.lte("ts", timestamp))
-							.sort(new Document("$natural", 1))
+							.sort(new Document("$natural", -1))
 							.limit(1);
 					if (results.first() == null) {
-						throw new IllegalStateException("oplog outdated.[" + timestamp + "]");
+						throw new IllegalStateException("[" + syncName + "] oplog outdated.[" + timestamp + "]");
 					}
-					config.addSyncCount(-1);	// 同期開始時に最終同期を再度同期するため１減算しておく
+					//logger.trace("[{}] start oplog timestamp = [{}]", config.getSyncName(), timestamp);
+					config.addSyncCount(-1);	// 同期開始時に最終同期データを再度同期するため１減算しておく
 				}
 
 				// oplogを継続的に取得
@@ -151,11 +153,14 @@ public class OplogExtractor extends AsyncProcess<SyncOperation> {
 			} catch (UnknownHostException | MongoSocketException mse) {
 				retryCnt++;
 				if (retryCnt >= 10) {
-					logger.error("mongo connect failed. (cnt=" + retryCnt  + ")", mse);
+					logger.error(String.format("[%s] mongo connect failed. (cnt=%d)", syncName, retryCnt), mse);
 					throw mse;
 				}
-				logger.warn("mongo connect retry. (cnt=" + retryCnt  + ")");
-				Thread.sleep(1000 * retryCnt);
+
+				long waitSec = (long) Math.min(60, Math.pow(2, retryCnt));
+				logger.warn("[{}] waiting mongo connect retry. (cnt={}) [{}sec]", syncName, retryCnt, waitSec);
+
+				Thread.sleep(waitSec * 1000);
 			} catch (MongoInterruptedException mie) {
 				// interrupt oplog tailable process.
 				break;
@@ -165,12 +170,6 @@ public class OplogExtractor extends AsyncProcess<SyncOperation> {
 			}
 		}
 	}
-
-//	private Document getUpdateDocument(String collection, Document idDoc) {
-//		String namespace = getCollectionName(idDoc);
-//		MongoCollection<Document> extractCollection = targetDb.getCollection(collection);
-//		return extractCollection.find((Document) idDoc.get("o2")).first();
-//	}
 
 	/**
 	 **********************************
@@ -206,7 +205,7 @@ public class OplogExtractor extends AsyncProcess<SyncOperation> {
 	 */
 	@Override
 	protected void postProcess() {
-		//super.postProcess();
-		logger.info("extract oplog stopped. [" + config.getSyncName() + "]");
+		super.postProcess();
+		logger.info("[{}] extract oplog stopped.", config.getSyncName());
 	}
 }

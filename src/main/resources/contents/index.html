@@ -45,6 +45,11 @@
 			<br>
 			<input type="text" placeholder="RESYNC" class="col-sm-3 bg-primary" ng-model="confirm" autofocus>
 		</div>
+		<div class="container">
+			<div class="checkbox">
+				<label><input type="checkbox" disabled> keep aliases</label>
+			</div>
+		</div>
 	</div>
 	<div class="modal-footer">
 		<button type="button" class="btn btn-sm btn-danger" ng-disabled="confirm != 'RESYNC'" ng-click="pressDelete()">Resync</button>
@@ -129,6 +134,7 @@ app.controller('MongoSyncCtrl', function ($log, $scope, $resource, $http, $inter
 				templateUrl: 'deleteDlg.html',
 				controller: 'deleteDlgCtrl',
 				scope : $scope,
+				size : "sm",
 				resolve: {
 					params: function () {
 						return { syncName : syncName };
@@ -144,6 +150,7 @@ app.controller('MongoSyncCtrl', function ($log, $scope, $resource, $http, $inter
 				templateUrl: 'resyncDlg.html',
 				controller: 'resyncDlgCtrl',
 				scope : $scope,
+				size : "sm",
 				resolve: {
 					params: function () {
 						return { syncName : syncName };
