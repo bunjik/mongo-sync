@@ -17,7 +17,6 @@ package info.bunji.mongodb.synces;
 
 import java.io.IOException;
 import java.util.EventListener;
-import java.util.concurrent.TimeUnit;
 
 import org.bson.BsonTimestamp;
 import org.elasticsearch.action.bulk.BulkItemResponse;
@@ -88,79 +87,78 @@ public class IndexerProcess extends AsyncProcess<Boolean>
 	 */
 	@Override
 	public void execute() {
-		logger.info("[{}] start sync.", config.getSyncName());
-		BulkProcessor processor = getBulkProcessor();
-		try {
-			for (SyncOperation op : operations) {
-				// monodbの操作日時を取得
-				oplogTs = op.getTimestamp();
+		String syncName = config.getSyncName();
 
-				if (SyncConfig.STATUS_INDEX.equals(op.getIndex())) {
-					processor.add(makeIndexRequest(op));
-					continue;
-				} else if (!config.isTargetCollection(op.getCollection())) {
-					continue;	// 同期対象外
+		while (true) {
+			logger.info("[{}] start sync.", syncName);
+			BulkProcessor processor = getBulkProcessor();
+			try {
+				for (SyncOperation op : operations) {
+					//同期対象チェック
+					if (SyncConfig.STATUS_INDEX.equals(op.getIndex())) {
+						processor.add(makeIndexRequest(op));
+						continue;
+					} else if (!config.isTargetCollection(op.getCollection())) {
+						continue;	// 同期対象外
+					}
+
+					// monodbの操作日時を取得
+					oplogTs = op.getTimestamp();
+
+					switch (op.getOp()) {
+
+					// ドキュメント追加/更新時
+					case INSERT:
+					case UPDATE:
+						config.addSyncCount();
+						processor.add(makeIndexRequest(op));
+						break;
+
+					// ドキュメント削除時
+					case DELETE:
+						config.addSyncCount();
+						processor.add(makeDeleteRequest(op));
+						break;
+
+						// コレクション削除
+					case DROP_COLLECTION:
+						// es2.x はtypeの削除が不可となったため、1件づつデータを削除する
+						// 削除処理はoplogとの不整合を防ぐため、同期で実行する
+						logger.info(op.getOp() + " index:" + indexName + " type:" + op.getCollection());
+						AsyncExecutor.execute(new EsTypeDeleter(esClient, indexName, op.getCollection())).block();
+						logger.debug("[{}] type deleted.[{}]", syncName, op.getCollection());
+
+						// ステータス更新用のリクエストを追加する
+						processor.add(EsUtils.makeStatusRequest(config, null, oplogTs));
+						break;
+
+					// データベース削除
+					case DROP_DATABASE:
+						logger.debug("[{}] not implemented yet. [{}]", syncName, op.getOp());
+						break;
+
+					// 未対応もしくは不明な操作
+					default:
+						logger.warn("[{}] unsupported operation. [{}/{}]", syncName, op.getCollection(), op.getOp());
+						break;
+					}
 				}
 
-				switch (op.getOp()) {
+				// stop indexer.
+				processor.add(EsUtils.makeStatusRequest(config, Status.STOPPED, null));
+				logger.info("[{}] indexer stopped.", syncName);
+				break;
 
-				// ドキュメント追加/更新時
-				case INSERT:
-				case UPDATE:
-					config.addSyncCount();
-					processor.add(makeIndexRequest(op));
-					break;
-
-				// ドキュメント削除時
-				case DELETE:
-					config.addSyncCount();
-					processor.add(makeDeleteRequest(op));
-					break;
-
-				// コレクション削除
-				case DROP_COLLECTION:
-					// es2.x はtypeの削除が不可となったため、1件づつデータを削除する
-					// 削除処理はoplogとの不整合を防ぐため、同期で実行する
-					logger.info(op.getOp() + " index:" + indexName + " type:" + op.getCollection());
-					AsyncExecutor.execute(new EsTypeDeleter(esClient, indexName, op.getCollection())).block();
-					logger.debug("type deleted.[{}]", op.getCollection());
-
-					// ステータス更新用のリクエストを追加する
-					processor.add(EsUtils.makeStatusRequest(config, null, oplogTs));
-					break;
-
-				// データベース削除
-				case DROP_DATABASE:
-					logger.debug("not implemented yet. [{}]", op.getOp());
-					break;
-
-				// 未対応もしくは不明な操作
-				default:
-					logger.warn("unsupported operation. [{}]", op.getOp());
-					break;
-				}
-			}
-		} catch (Throwable t) {
-			processor.add(EsUtils.makeStatusRequest(config, Status.STOPPED, null));
-			logger.error("[{}] indexer stopped.", config.getSyncName(), t);
-			throw t;
-		} finally {
-			try {
-				operations.close();
-			} catch (IOException ioe) {
-				// do nothing.
-			}
-			try {
+			} catch (IllegalArgumentException | IllegalStateException e) {
+				logger.warn(String.format("[{}] indexer bulkProcess error.(%s)", syncName, e.getMessage()), e);
+			} catch(Throwable t) {
+				processor.add(EsUtils.makeStatusRequest(config, Status.STOPPED, null));
+				logger.error(String.format("[{}] indexer stopped with error.(%s)", syncName, t.getMessage()), t);
+				throw t;
+			} finally {
 				processor.flush();
-				processor.awaitClose(10, TimeUnit.SECONDS);
-				logger.info("[{}] stop sync.", config.getSyncName());
-
-				if (listener != null) {
-					// 終了の通知
-					listener.onIndexerStop(config.getSyncName());
-				}
-			} catch (InterruptedException e) {
-				e.printStackTrace();
+				processor.close();
+				logger.info("[{}] stop sync.", syncName);
 			}
 		}
 	}

@@ -254,6 +254,7 @@ app.controller('MongoSyncCtrl', function ($log, $scope, $resource, $http, $inter
 			delete data['syncCount'];
 			delete data['lastOpTime'];
 			delete data['status'];
+			delete data['aliases'];
 			$scope.showInfo("config", name, data);
 		});
 	}
@@ -380,10 +381,10 @@ app.controller('MongoSyncCtrl', function ($log, $scope, $resource, $http, $inter
 						<table class="table table-bordered table-hover _table-condensed _table-striped">
 							<thead class="bg-primary">
 								<tr>
-									<th class="text-center">SyncName</th>
-									<th class="text-center">Target Index</th>
+									<th class="text-center">Name</th>
+									<th class="text-center">Index</th>
 									<th class="text-center" style="width:10em">Status</th>
-									<th class="text-center" style="width:16em">Last Sync</th>
+									<th class="text-center" style="width:11em">Last Sync</th>
 									<th class="text-center col-md-1" data-toggle="tooltip" title="indexed last started">Indexed</th>
 									<th class="text-center col-md-2">Action</th>
 									<th class="text-center col-md-1"></th>
@@ -392,7 +393,14 @@ app.controller('MongoSyncCtrl', function ($log, $scope, $resource, $http, $inter
 							<tbody>
 								<tr x-ng-repeat="(syncName, config) in configs" x-ng-class="{'danger' : config.status.endsWith('FAILED') }">
 										<td class="vert-align">{{ syncName }}</td>
-									<td class="vert-align">{{ config.indexName }}</td>
+									<td class="vert-align">{{ config.indexName }}
+										<div>
+										<span x-ng-repeat="alias in config.aliases">
+											<span class="label label-info">{{ alias }}</span>
+											&nbsp;
+										</span>
+										</div>
+									</td>
 									<td class="text-center vert-align" style="font-size:1.0em;">
 										<span class="panel-title" x-ng-switch="config.status">
 											<span x-ng-switch-when="RUNNING" class="label label-success">{{config.status}}</span>
@@ -401,7 +409,7 @@ app.controller('MongoSyncCtrl', function ($log, $scope, $resource, $http, $inter
 											<span x-ng-switch-default class="label label-danger">{{config.status}}</span>
 										</span>
 									</td>
-									<td class="text-center vert-align word-wrap">{{ config.lastOpTime.time ? (config.lastOpTime.time * 1000 | date:'yyyy-MM-dd HH:mm:ss Z') : 'never' }}</td>
+									<td class="text-center vert-align word-wrap">{{ config.lastOpTime.time ? (config.lastOpTime.time * 1000 | date:'yyyy/MM/dd HH:mm:ss') : 'never' }}</td>
 									<td class="text-right vert-align word-wrap">{{ config.syncCount | number }}</td>
 									<td class="text-center vert-align">
 										<span x-ng-show="config.status != 'RUNNING' && config.status != 'INITIAL_IMPORTING'">

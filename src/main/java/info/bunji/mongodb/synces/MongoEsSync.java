@@ -134,7 +134,7 @@ public class MongoEsSync {
 		try {
 			server.start();
 		} catch (Exception e) {
-			logger.error(e.getMessage(), e);
+			logger.error("server start failed.", e);
 			System.exit(1);
 		}
 

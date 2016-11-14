@@ -45,8 +45,6 @@ class MongoCachedClient extends MongoClient {
 
 	private final Set<Listener> listeners = new HashSet<>();
 
-	private final Object lock = new Object();
-
 	/**
 	 **********************************
 	 * @param cacheKey

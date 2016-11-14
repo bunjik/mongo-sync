@@ -1,24 +1,33 @@
 package info.bunji.mongodb.synces.util;
 
 import java.io.IOException;
+import java.util.Collection;
+import java.util.Iterator;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 import org.bson.BsonTimestamp;
+import org.elasticsearch.action.admin.indices.alias.get.GetAliasesRequest;
 import org.elasticsearch.action.admin.indices.exists.indices.IndicesExistsRequest;
 import org.elasticsearch.action.admin.indices.mapping.get.GetMappingsResponse;
 import org.elasticsearch.action.admin.indices.refresh.RefreshRequest;
 import org.elasticsearch.action.index.IndexRequest;
 import org.elasticsearch.action.update.UpdateRequest;
 import org.elasticsearch.client.Client;
+import org.elasticsearch.cluster.metadata.AliasMetaData;
 import org.elasticsearch.cluster.metadata.MappingMetaData;
 import org.elasticsearch.common.collect.ImmutableOpenMap;
 import org.elasticsearch.common.xcontent.XContentBuilder;
 import org.elasticsearch.common.xcontent.json.JsonXContent;
+import org.elasticsearch.index.query.QueryBuilders;
+import org.elasticsearch.search.SearchHits;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.carrotsearch.hppc.cursors.ObjectObjectCursor;
+import com.google.common.collect.LinkedListMultimap;
+import com.google.common.collect.ListMultimap;
 
 import info.bunji.mongodb.synces.Status;
 import info.bunji.mongodb.synces.SyncConfig;
@@ -51,6 +60,67 @@ public class EsUtils {
 						.exists(new IndicesExistsRequest(indexName))
 						.actionGet()
 						.isExists();
+	}
+
+	/**
+	 ********************************************
+	 * インデックス内のタイプのドキュメント有無を返す.
+	 * @param esClient
+	 * @param indexName インデックス名
+	 * @param indexName コレクション名
+	 * @return 対象typeが存在しないまたは空の場合はtrue、そうでない場合はfalseを返す
+	 ********************************************
+	 */
+	public static boolean isEmptyTypes(Client esClient, String indexName, Collection<String> types) {
+		return (esClient.prepareSearch(indexName)
+						.setTypes(types.toArray(new String[types.size()]))
+						.setQuery(QueryBuilders.matchAllQuery())
+						.setSize(0)
+						.execute()
+						.actionGet()
+						.getHits()
+						.getTotalHits() == 0);
+	}
+
+	/**
+	 ********************************************
+	 *インデックスが空であるかを返す.
+	 * @param esClient
+	 * @param indexName インデックス名
+	 * @return 空の場合はtrue、そうでない場合はfalseを返す
+	 ********************************************
+	 */
+	public static boolean isEmptyIndex(Client esClient, String indexName) {
+		SearchHits hits = esClient.prepareSearch(indexName)
+							.setSize(0)
+							.execute()
+							.actionGet()
+							.getHits();
+		return (hits.getTotalHits() == 0);
+	}
+
+	/**
+	 ********************************************
+	 *
+	 ********************************************
+	 */
+	public static Map<String, Collection<String>> getIndexAliases(Client esClient, List<String> indexNames) {
+		Iterator<ObjectObjectCursor<String, List<AliasMetaData>>> it =
+				esClient.admin()
+						.indices()
+						.getAliases(new GetAliasesRequest().indices(indexNames.toArray(new String[indexNames.size()])))
+						.actionGet()
+						.getAliases()
+						.iterator();
+
+		ListMultimap<String, String> aliasMap = LinkedListMultimap.create();
+		while (it.hasNext()) {
+			ObjectObjectCursor<String, List<AliasMetaData>> entry = it.next();
+			for (AliasMetaData meta : entry.value) {
+				aliasMap.put(entry.key, meta.alias());
+			}
+		}
+		return aliasMap.asMap();
 	}
 
 	/**

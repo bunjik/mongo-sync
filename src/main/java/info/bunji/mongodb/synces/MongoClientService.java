@@ -89,7 +89,7 @@ public class MongoClientService implements MongoCachedClient.Listener {
 				MongoClientOptions option = MongoClientOptions.builder()
 											.socketKeepAlive(true)
 											.readPreference(ReadPreference.primaryPreferred())
-//											.alwaysUseMBeans(true)
+											.alwaysUseMBeans(true)
 											.connectionsPerHost(100).build();
 
 				// TODO sharding未対応

@@ -16,6 +16,7 @@
 package info.bunji.mongodb.synces;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.EventListener;
 import java.util.List;
 import java.util.Map;
@@ -40,6 +41,9 @@ import org.elasticsearch.search.SearchHit;
 import org.elasticsearch.search.sort.SortBuilders;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import com.google.common.collect.Maps;
+import com.google.common.collect.Maps.EntryTransformer;
 
 import info.bunji.asyncutil.AsyncExecutor;
 import info.bunji.asyncutil.AsyncProcess;
@@ -106,6 +110,10 @@ public class StatusCheckProcess extends AsyncProcess<Boolean> implements Indexer
 	 **********************************
 	 */
 	public Map<String, SyncConfig> getConfigList() {
+		return getConfigList(false);
+	}
+
+	public Map<String, SyncConfig> getConfigList(boolean withAlias) {
 		SearchResponse res = esClient.prepareSearch(SyncConfig.STATUS_INDEX)
 				.setTypes("config", "status")
 				.addSort(SortBuilders.fieldSort("_type"))
@@ -119,12 +127,14 @@ public class StatusCheckProcess extends AsyncProcess<Boolean> implements Indexer
 			throw new IndexNotFoundException("failed shards found.");
 		}
 
+		List<String> indexNames = new ArrayList<>();
 		Map<String, SyncConfig> configMap = new TreeMap<>();
 		for (SearchHit hit : res.getHits().getHits()) {
 			if ("config".equals(hit.getType())) {
 				SyncConfig config = JSON.decode(hit.getSourceAsString(), SyncConfig.class);
 				config.setSyncName(hit.getId());
 				configMap.put(hit.getId(), config);
+				indexNames.add(config.getIndexName());
 			} else if ("status".equals(hit.getType()) && configMap.containsKey(hit.getId())) {
 				SyncConfig config = configMap.get(hit.getId());
 				SyncStatus status = new SyncStatus(hit.sourceAsMap());
@@ -133,8 +143,21 @@ public class StatusCheckProcess extends AsyncProcess<Boolean> implements Indexer
 				if (indexerMap.get(config.getSyncName()) != null) {
 					config.addSyncCount(indexerMap.get(config.getSyncName()).getConfig().getSyncCount());
 				}
+
 			}
 		}
+
+		if (withAlias) {
+			final Map<String, Collection<String>> aliasMap = EsUtils.getIndexAliases(esClient, indexNames);
+			configMap = Maps.transformEntries(configMap, new EntryTransformer<String, SyncConfig, SyncConfig>() {
+				@Override
+				public SyncConfig transformEntry(String key, SyncConfig value) {
+					value.setAliases(aliasMap.get(value.getIndexName()));
+					return value;
+				}
+			});
+		}
+
 		return configMap;
 	}
 
@@ -158,20 +181,31 @@ public class StatusCheckProcess extends AsyncProcess<Boolean> implements Indexer
 					String syncName = entry.getKey();
 					SyncConfig config = entry.getValue();
 
-					//CollectionExtractor extractor = null;
 					AsyncProcess<SyncOperation> extractor = null;
 					IndexerProcess indexer = indexerMap.get(syncName);
 					if (indexer == null) {
 						if (config.getStatus() == null) {
 							// initial import
-							if (!EsUtils.isExistsIndex(esClient, config.getIndexName())) {
-								extractor = new CollectionExtractor(config, null);
-								esClient.update(EsUtils.makeStatusRequest(config, Status.STARTING, null));
+							if (config.getImportCollections().isEmpty()) {
+								// check exists index. if import all collections
+								if (EsUtils.isExistsIndex(esClient, config.getIndexName())) {
+									// インポート対象のインデックスが存在
+									logger.error("[{}] import index already exists.[index:{}]", syncName, config.getIndexName());
+									esClient.update(EsUtils.makeStatusRequest(config, Status.INITIAL_IMPORT_FAILED, null));
+									continue;
+								}
 							} else {
-								// インポート対象のインデックスが存在
-								logger.error("[{}] import index already exists.[index:{}]", syncName, config.getIndexName());
-								esClient.update(EsUtils.makeStatusRequest(config, Status.INITIAL_IMPORT_FAILED, null));
+								// check exists types. if specified collections
+								if (EsUtils.isEmptyTypes(esClient, config.getIndexName(), config.getImportCollections())) {
+									// インポート対象のインデックスが空でない
+									logger.error("[{}] import type already exists.[index:{}]", syncName, config.getIndexName());
+									esClient.update(EsUtils.makeStatusRequest(config, Status.INITIAL_IMPORT_FAILED, null));
+									continue;
+								}
 							}
+							extractor = new CollectionExtractor(config, null);
+							esClient.update(EsUtils.makeStatusRequest(config, Status.STARTING, null));
+
 						} else if (Status.RUNNING == config.getStatus()) {
 							// 起動時の再開
 							extractor = new OplogExtractor(config, config.getLastOpTime());

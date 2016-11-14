@@ -59,7 +59,7 @@ public class RestServlet extends HttpServlet {
 			if (params[1].equals("list")) {
 				res.setStatus(HttpServletResponse.SC_OK);
 				Map<String, Object> results = new TreeMap<>();
-				results.put("results", process.getConfigList());
+				results.put("results", process.getConfigList(true));
 				JSON.encode(results, os);
 			} else if (params[1].equals("config") && params.length >= 3) {
 				//results.put("results", process.getConfigList().get(params[2]));

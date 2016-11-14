@@ -52,6 +52,8 @@ public class OplogExtractor extends AsyncProcess<SyncOperation> {
 	private BSONTimestamp timestamp;
 	private MongoDatabase targetDb = null;
 
+	public final int MAX_RETRY = 20;
+
 	/**
 	 ********************************************
 	 *
@@ -152,13 +154,12 @@ public class OplogExtractor extends AsyncProcess<SyncOperation> {
 				// do nothing.
 			} catch (UnknownHostException | MongoSocketException mse) {
 				retryCnt++;
-				if (retryCnt >= 10) {
-					logger.error(String.format("[%s] mongo connect failed. (cnt=%d)", syncName, retryCnt), mse);
+				if (retryCnt >= MAX_RETRY) {
+					logger.error(String.format("[%s] mongo connect failed. (RETRY=%d)", syncName, retryCnt), mse);
 					throw mse;
 				}
-
 				long waitSec = (long) Math.min(60, Math.pow(2, retryCnt));
-				logger.warn("[{}] waiting mongo connect retry. (cnt={}) [{}sec]", syncName, retryCnt, waitSec);
+				logger.warn("[{}] waiting mongo connect retry. ({}/{}) [{}sec]", syncName, retryCnt, MAX_RETRY, waitSec);
 
 				Thread.sleep(waitSec * 1000);
 			} catch (MongoInterruptedException mie) {

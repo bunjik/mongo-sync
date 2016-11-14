@@ -17,6 +17,7 @@ package info.bunji.mongodb.synces;
 
 import java.net.InetAddress;
 import java.net.UnknownHostException;
+import java.util.Collection;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
@@ -75,6 +76,11 @@ public class SyncConfig {
 	/** ステータス */
 	@JSONHint(ignore=true)
 	private Status status;
+
+	/** エイリアス */
+	@JSONHint(ignore=true)
+	private Collection<String> aliases;
+
 
 	public String getSyncName() {
 		return syncName;
@@ -192,6 +198,14 @@ public class SyncConfig {
 
 	public void setLastOpTime(BsonTimestamp lastOpTime) {
 		this.lastOpTime = lastOpTime;
+	}
+
+	public Collection<String> getAliases() {
+		return this.aliases;
+	}
+
+	public void setAliases(Collection<String> aliases) {
+		this.aliases = aliases;
 	}
 
 	/*
