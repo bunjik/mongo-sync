@@ -148,14 +148,18 @@ public class StatusCheckProcess extends AsyncProcess<Boolean> implements Indexer
 		}
 
 		if (withAlias) {
-			final Map<String, Collection<String>> aliasMap = EsUtils.getIndexAliases(esClient, indexNames);
-			configMap = Maps.transformEntries(configMap, new EntryTransformer<String, SyncConfig, SyncConfig>() {
-				@Override
-				public SyncConfig transformEntry(String key, SyncConfig value) {
-					value.setAliases(aliasMap.get(value.getIndexName()));
-					return value;
-				}
-			});
+			try {
+				final Map<String, Collection<String>> aliasMap = EsUtils.getIndexAliases(esClient, indexNames);
+				configMap = Maps.transformEntries(configMap, new EntryTransformer<String, SyncConfig, SyncConfig>() {
+					@Override
+					public SyncConfig transformEntry(String key, SyncConfig value) {
+						value.setAliases(aliasMap.get(value.getIndexName()));
+						return value;
+					}
+				});
+			} catch (IndexNotFoundException e) {
+				// do nothing.
+			}
 		}
 
 		return configMap;
