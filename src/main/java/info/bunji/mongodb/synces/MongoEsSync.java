@@ -124,7 +124,7 @@ public class MongoEsSync {
 		// rest api
 		ServletContextHandler apiContext = new ServletContextHandler(server, "/api");
 		apiContext.addServlet(new ServletHolder(new RestServlet(process)), "/configs/*");
-		apiContext.addServlet(new ServletHolder(new SyncLogServlet()), "/log");
+		apiContext.addServlet(new ServletHolder(new SyncLogServlet()), "/log/*");
 
 		ContextHandlerCollection handlers = new ContextHandlerCollection();
 		handlers.addHandler(staticContext);

@@ -30,6 +30,7 @@ import javax.servlet.http.HttpServletResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import ch.qos.logback.classic.Level;
 import ch.qos.logback.classic.filter.ThresholdFilter;
 import ch.qos.logback.classic.spi.ILoggingEvent;
 import ch.qos.logback.core.read.CyclicBufferAppender;
@@ -41,9 +42,13 @@ import net.arnx.jsonic.JSON;
  */
 public class SyncLogServlet extends HttpServlet {
 
+	private Logger logger = LoggerFactory.getLogger(getClass());
+
 	private CyclicBufferAppender<ILoggingEvent> appender = null;
 
 	private static final int LOG_SIZE = 100;
+
+	private ThresholdFilter filter = new ThresholdFilter();
 
 	public SyncLogServlet() {
 		// UI出力用のAppender
@@ -51,7 +56,6 @@ public class SyncLogServlet extends HttpServlet {
 		if (rootLogger instanceof ch.qos.logback.classic.Logger) {
 			appender = new CyclicBufferAppender<>();
 			appender.setMaxSize(LOG_SIZE);
-			ThresholdFilter filter = new ThresholdFilter();
 //			filter.setLevel("INFO");
 			filter.setLevel("DEBUG");
 			filter.start();
@@ -90,6 +94,27 @@ public class SyncLogServlet extends HttpServlet {
 			os.flush();
 		} catch (Exception e) {
 			res.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
+		}
+	}
+
+	/* (非 Javadoc)
+	 * @see javax.servlet.http.HttpServlet#doPPost(javax.servlet.http.HttpServletRequest, javax.servlet.http.HttpServletResponse)
+	 */
+	@Override
+	protected void doPost(HttpServletRequest req, HttpServletResponse res) throws ServletException, IOException {
+		String[] params = req.getPathInfo().split("/");
+		if (params[1].equals("level")) {
+			String level = Level.toLevel(req.getParameter("level"), Level.INFO).toString();
+			filter.setLevel(level);
+			logger.info("Last Log level changed. [{}]", level);
+
+			res.setStatus(HttpServletResponse.SC_OK);
+			Map<String, Object> results = new TreeMap<>();
+			results.put("level", level);
+			OutputStream os = res.getOutputStream();
+			JSON.encode(results, os);
+			os.flush();
+			res.setContentType("application/json; charset=utf-8");
 		}
 	}
 
