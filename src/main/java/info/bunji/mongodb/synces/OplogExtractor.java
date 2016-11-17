@@ -20,7 +20,6 @@ import java.util.Set;
 
 import org.bson.BsonTimestamp;
 import org.bson.Document;
-import org.bson.types.BSONTimestamp;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -49,7 +48,7 @@ public class OplogExtractor extends AsyncProcess<SyncOperation> {
 	private Logger logger = LoggerFactory.getLogger(getClass());
 
 	private SyncConfig config;
-	private BSONTimestamp timestamp;
+	private BsonTimestamp timestamp;
 	private MongoDatabase targetDb = null;
 
 	public final int MAX_RETRY = 20;
@@ -65,7 +64,7 @@ public class OplogExtractor extends AsyncProcess<SyncOperation> {
 	OplogExtractor(SyncConfig config, BsonTimestamp ts) {
 		this.config = config;
 		if (ts != null) {
-			this.timestamp = new BSONTimestamp(ts.getTime(), ts.getInc());
+			this.timestamp = new BsonTimestamp(ts.getTime(), ts.getInc());
 		}
 	}
 
@@ -125,20 +124,20 @@ public class OplogExtractor extends AsyncProcess<SyncOperation> {
 
 					Operation operation = Operation.valueOf(doc.get("op"));
 
-					BsonTimestamp ts = doc.get("ts", BsonTimestamp.class);
+					timestamp = doc.get("ts", BsonTimestamp.class);
 					if (operation == Operation.INSERT) {
 						Document filteredDoc = DocumentUtils.applyFieldFilter(doc.get("o", Document.class), includeFields, excludeFields);
-						append(new SyncOperation(operation, index, collection, filteredDoc, ts));
+						append(new SyncOperation(operation, index, collection, filteredDoc, timestamp));
 					} else if (operation == Operation.DELETE) {
-						append(new SyncOperation(operation, index, collection, doc.get("o", Document.class), ts));
+						append(new SyncOperation(operation, index, collection, doc.get("o", Document.class), timestamp));
 					} else if (operation == Operation.UPDATE) {
-						// update時は差分データとなるのでidからドキュメントを取得する
+						// update時は差分データとなるのでidでドキュメントを取得する
 						String namespace = getCollectionName(doc);
 						MongoCollection<Document> extractCollection = targetDb.getCollection(namespace);
 						Document updateDoc = extractCollection.find(doc.get("o2", Document.class)).first();
 						if (null != updateDoc) {
 							Document filteredDoc = DocumentUtils.applyFieldFilter(updateDoc, includeFields, excludeFields);
-							append(new SyncOperation(operation, index, namespace, filteredDoc, ts));
+							append(new SyncOperation(operation, index, namespace, filteredDoc, timestamp));
 						}
 
 					} else if (operation == Operation.DROP_COLLECTION) {
@@ -166,7 +165,7 @@ public class OplogExtractor extends AsyncProcess<SyncOperation> {
 				// interrupt oplog tailable process.
 				break;
 			} catch (Throwable t) {
-				logger.error(t.getMessage(), t);
+				logger.error(String.format("[{}] error. [msg:{}]({})", syncName, t.getMessage(), t.getClass().getSimpleName()), t);
 				throw t;
 			}
 		}
@@ -183,7 +182,7 @@ public class OplogExtractor extends AsyncProcess<SyncOperation> {
 		// 対象のDB名以降の文字列が対象
 		// 暫定で最初のピリオド以降
 		String namespace = oplogDoc.getString("ns");
-		if (!namespace.startsWith(config.getMongoDbName())) {
+		if (!namespace.startsWith(config.getMongoDbName()+".")) {
 			return null;
 		}
 		String collection = namespace.substring(namespace.indexOf(".") + 1);
