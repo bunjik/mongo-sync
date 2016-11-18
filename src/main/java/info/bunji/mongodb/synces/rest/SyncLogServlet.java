@@ -48,6 +48,8 @@ public class SyncLogServlet extends HttpServlet {
 
 	private static final int LOG_SIZE = 100;
 
+	private static String logLevel = "INFO";
+
 	private ThresholdFilter filter = new ThresholdFilter();
 
 	public SyncLogServlet() {
@@ -56,8 +58,7 @@ public class SyncLogServlet extends HttpServlet {
 		if (rootLogger instanceof ch.qos.logback.classic.Logger) {
 			appender = new CyclicBufferAppender<>();
 			appender.setMaxSize(LOG_SIZE);
-//			filter.setLevel("INFO");
-			filter.setLevel("DEBUG");
+			filter.setLevel(logLevel);
 			filter.start();
 			appender.addFilter(filter);
 			((ch.qos.logback.classic.Logger) rootLogger).addAppender(appender);
@@ -104,13 +105,15 @@ public class SyncLogServlet extends HttpServlet {
 	protected void doPost(HttpServletRequest req, HttpServletResponse res) throws ServletException, IOException {
 		String[] params = req.getPathInfo().split("/");
 		if (params[1].equals("level")) {
-			String level = Level.toLevel(req.getParameter("level"), Level.INFO).toString();
-			filter.setLevel(level);
-			logger.info("Last Log level changed. [{}]", level);
+			String oldLogLevel = logLevel;
+			logLevel = Level.toLevel(params[2], Level.INFO).toString();
+			filter.setLevel(logLevel);
+			logger.info("Last Log level changed. [{} -> {}]", oldLogLevel, logLevel);
 
 			res.setStatus(HttpServletResponse.SC_OK);
 			Map<String, Object> results = new TreeMap<>();
-			results.put("level", level);
+			results.put("before", oldLogLevel);
+			results.put("current", logLevel);
 			OutputStream os = res.getOutputStream();
 			JSON.encode(results, os);
 			os.flush();
