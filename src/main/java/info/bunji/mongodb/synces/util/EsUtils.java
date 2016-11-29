@@ -20,6 +20,7 @@ import org.elasticsearch.cluster.metadata.MappingMetaData;
 import org.elasticsearch.common.collect.ImmutableOpenMap;
 import org.elasticsearch.common.xcontent.XContentBuilder;
 import org.elasticsearch.common.xcontent.json.JsonXContent;
+import org.elasticsearch.index.IndexNotFoundException;
 import org.elasticsearch.index.query.QueryBuilders;
 import org.elasticsearch.search.SearchHits;
 import org.slf4j.Logger;
@@ -72,15 +73,19 @@ public class EsUtils {
 	 ********************************************
 	 */
 	public static boolean isEmptyTypes(Client esClient, String indexName, Collection<String> types) {
-		return (esClient.prepareSearch(indexName)
-						.setTypes(types.toArray(new String[types.size()]))
-						.setQuery(QueryBuilders.matchAllQuery())
-						.setSize(0)
-						.execute()
-						.actionGet()
-						.getHits()
-						.getTotalHits() == 0);
-	}
+		try {
+			return (esClient.prepareSearch(indexName)
+							.setTypes(types.toArray(new String[types.size()]))
+							.setQuery(QueryBuilders.matchAllQuery())
+							.setSize(0)
+							.execute()
+							.actionGet()
+							.getHits()
+							.getTotalHits() == 0);
+		} catch (IndexNotFoundException infe) {
+			return true;
+		}
+ 	}
 
 	/**
 	 ********************************************

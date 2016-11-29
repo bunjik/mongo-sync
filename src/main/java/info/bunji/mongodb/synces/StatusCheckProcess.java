@@ -200,7 +200,7 @@ public class StatusCheckProcess extends AsyncProcess<Boolean> implements Indexer
 								}
 							} else {
 								// check exists types. if specified collections
-								if (EsUtils.isEmptyTypes(esClient, config.getIndexName(), config.getImportCollections())) {
+								if (!EsUtils.isEmptyTypes(esClient, config.getIndexName(), config.getImportCollections())) {
 									// インポート対象のインデックスが空でない
 									logger.error("[{}] import type already exists.[index:{}]", syncName, config.getIndexName());
 									esClient.update(EsUtils.makeStatusRequest(config, Status.INITIAL_IMPORT_FAILED, null));
