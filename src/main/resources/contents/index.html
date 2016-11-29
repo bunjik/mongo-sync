@@ -346,8 +346,8 @@ app.controller('MongoSyncCtrl', function ($log, $scope, $resource, $http, $inter
 				</button>
 				<a class="navbar-brand" href="#">MongoDB Sync Administration</a>
 			</div>
+<!--
 			<div class="collapse navbar-collapse" id="nav-menu-1">
-
 				<ul class="nav navbar-nav _navbar-right">
 					<li class="dropdown" x-uib-dropdown>
 						<a role="button" class="dropdown-toggle" x-uib-dropdown-toggle>
@@ -359,17 +359,13 @@ app.controller('MongoSyncCtrl', function ($log, $scope, $resource, $http, $inter
 						</ul>
 					</li>
 				</ul>
-
-				<span class="pull-right">Last update: {{ lastUpdate ? (lastUpdate | date:'yyyy-MM-dd HH:mm:ss') : '' }}&nbsp;</span>
 			</div>
+-->
+			<span class="pull-right">Last update: {{ lastUpdate ? (lastUpdate | date:'yyyy-MM-dd HH:mm:ss') : '' }}&nbsp;</span>
 		</div>
 	</nav>
 
 	<div class="container">
-<!--
-		<div uib-alert ng-class="alert-warning" dismiss-on-timeout="5">{{alert.msg}}</div>
--->
-
 		<div class="row">
 			<div class="col-md-12">
 				<uib-tabset active="activeTab">
