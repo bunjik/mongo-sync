@@ -20,6 +20,7 @@ import java.util.Date;
 
 import org.bson.BsonTimestamp;
 import org.bson.Document;
+import org.bson.types.ObjectId;
 import org.joda.time.DateTime;
 
 import com.google.gson.Gson;
@@ -58,12 +59,19 @@ public class SyncOperation {
 				return new JsonPrimitive(dt.toString());
 			}
 		});
-		// convert Date to JSON string
+		// convert Date to JSON String
 		builder.registerTypeAdapter(Date.class, new JsonSerializer<Date>() {
 			@Override
 			public JsonElement serialize(Date src, Type typeOfSrc, JsonSerializationContext context) {
 				DateTime dt = new DateTime(src);
 				return new JsonPrimitive(dt.toString());
+			}
+		});
+		// convert ObjectId to String
+		builder.registerTypeAdapter(ObjectId.class, new JsonSerializer<ObjectId>() {
+			@Override
+			public JsonElement serialize(ObjectId src, Type typeOfSrc, JsonSerializationContext context) {
+				return new JsonPrimitive(src.toString());
 			}
 		});
 
