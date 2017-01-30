@@ -19,6 +19,7 @@ import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.InetAddress;
+import java.net.InetSocketAddress;
 import java.util.HashSet;
 import java.util.Properties;
 import java.util.Set;
@@ -33,8 +34,10 @@ import org.eclipse.jetty.util.resource.Resource;
 import org.elasticsearch.client.Client;
 import org.elasticsearch.client.transport.TransportClient;
 import org.elasticsearch.common.settings.Settings;
+import org.elasticsearch.common.settings.Settings.Builder;
 import org.elasticsearch.common.transport.InetSocketTransportAddress;
 import org.elasticsearch.common.transport.TransportAddress;
+import org.elasticsearch.shield.ShieldPlugin;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -88,6 +91,8 @@ public class MongoEsSync {
 			System.exit(1);
 		}
 
+		logger.debug(prop.toString());
+
 		Set<TransportAddress> addresses = new HashSet<>();
 		for (String host : prop.getProperty("es.hosts").split(",")) {
 			String[] addr = host.split(":");
@@ -97,17 +102,30 @@ public class MongoEsSync {
 				port = addr[1];
 			}
 			addresses.add(new InetSocketTransportAddress(
+							new InetSocketAddress(
 								InetAddress.getByName(name),
-								Integer.valueOf(port)));
+								Integer.valueOf(port)
+							)
+						));
 		}
 
-		Settings settings = Settings.settingsBuilder()
-				.put("cluster.name", prop.getProperty("es.clustername"))
-				.build();
+		Builder settings = Settings.settingsBuilder()
+				//.put("client.transport.ignore_cluster_name", true)
+				.put("cluster.name", prop.getProperty("es.clustername"));
+
+		// es connection with shield auth.
+		if (prop.containsKey("es.auth")) {
+			logger.info("elasticsearch connection with authentication.");
+			settings.put("shield.user", prop.getProperty("es.auth"));
+		}
+
 		final Client esClient = TransportClient.builder()
-				.settings(settings)
+				.addPlugin(ShieldPlugin.class)	// for shield auth
+				.settings(settings.build())
 				.build()
 				.addTransportAddresses(addresses.toArray(new InetSocketTransportAddress[0]));
+
+		//logger.debug(esClient.toString());
 
 		StatusCheckProcess process = new StatusCheckProcess(esClient, CHECK_INTERVAL);
 
@@ -144,6 +162,7 @@ public class MongoEsSync {
         // shutdown hook
 		Runtime.getRuntime().addShutdownHook(new Thread() {
 			public void run() {
+				logger.debug("es sync stopping.");
 				try {
 					checker.close();
 				} catch (IOException e) {
@@ -151,7 +170,7 @@ public class MongoEsSync {
 				}
 				MongoClientService.closeAllClient();
 				esClient.close();
-				logger.debug("stop es sync.");
+				logger.debug("es sync stopped.");
 			}
 		});
 
