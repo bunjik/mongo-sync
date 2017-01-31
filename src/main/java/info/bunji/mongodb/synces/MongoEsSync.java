@@ -91,7 +91,7 @@ public class MongoEsSync {
 			System.exit(1);
 		}
 
-		logger.debug(prop.toString());
+		logger.trace(prop.toString());
 
 		Set<TransportAddress> addresses = new HashSet<>();
 		for (String host : prop.getProperty("es.hosts").split(",")) {
@@ -111,7 +111,8 @@ public class MongoEsSync {
 
 		Builder settings = Settings.settingsBuilder()
 				//.put("client.transport.ignore_cluster_name", true)
-				.put("cluster.name", prop.getProperty("es.clustername"));
+				.put("cluster.name", prop.getProperty("es.clustername"))
+				.put("transport.client.sniff", true);
 
 		// es connection with shield auth.
 		if (prop.containsKey("es.auth")) {
@@ -120,7 +121,7 @@ public class MongoEsSync {
 		}
 
 		final Client esClient = TransportClient.builder()
-				.addPlugin(ShieldPlugin.class)	// for shield auth
+				.addPlugin(ShieldPlugin.class)	// auth for shield plugin
 				.settings(settings.build())
 				.build()
 				.addTransportAddresses(addresses.toArray(new InetSocketTransportAddress[0]));

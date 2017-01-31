@@ -30,8 +30,6 @@ import org.bson.BsonTimestamp;
 
 import com.mongodb.ServerAddress;
 
-import net.arnx.jsonic.JSONHint;
-
 /**
  ************************************************
  * 同期設定保持クラス
@@ -66,20 +64,20 @@ public class SyncConfig {
 	private MongoConnection mongoConnection;
 
 	/**  */
-	@JSONHint(ignore=true)
+	//@JSONHint(ignore=true)
 	private BsonTimestamp lastOpTime = null;
 
 	/** 同期件数 */
-	@JSONHint(ignore=true)
+	//@JSONHint(ignore=true)
 	private AtomicLong syncCount = new AtomicLong(0);
 
 	/** ステータス */
-	@JSONHint(ignore=true)
+	//@JSONHint(ignore=true)
 	private Status status;
 
 	/** エイリアス */
-	@JSONHint(ignore=true)
-	private Collection<String> aliases;
+	//@JSONHint(ignore=true)
+	private transient Collection<String> aliases;
 
 
 	public String getSyncName() {
@@ -363,7 +361,7 @@ public class SyncConfig {
 			this.port = port;
 		}
 
-		@JSONHint(ignore=true)
+		//@JSONHint(ignore=true)
 		public ServerAddress getServerAddress() throws UnknownHostException {
 			return new ServerAddress(InetAddress.getByName(host), port);
 		}

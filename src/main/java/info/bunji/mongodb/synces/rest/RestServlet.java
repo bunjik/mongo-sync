@@ -16,12 +16,10 @@
 package info.bunji.mongodb.synces.rest;
 
 import java.io.IOException;
-import java.io.OutputStream;
 import java.util.Map;
 import java.util.TreeMap;
 
 import javax.servlet.ServletException;
-import javax.servlet.http.HttpServlet;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 
@@ -30,13 +28,14 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import info.bunji.mongodb.synces.StatusCheckProcess;
-import net.arnx.jsonic.JSON;
 
 /**
+ ************************************************
+ * 
  * @author Fumiharu Kinoshita
- *
+ ************************************************
  */
-public class RestServlet extends HttpServlet {
+public class RestServlet extends AbstractRestServlet {
 
 	private Logger logger = LoggerFactory.getLogger(getClass());
 
@@ -54,25 +53,19 @@ public class RestServlet extends HttpServlet {
 		//logger.debug("call doGet() " + req.getPathInfo());
 		try {
 			String[] params = req.getPathInfo().split("/");
-			res.setContentType("application/json; charset=utf-8");
-			OutputStream os = res.getOutputStream();
 			if (params[1].equals("list")) {
-				res.setStatus(HttpServletResponse.SC_OK);
 				Map<String, Object> results = new TreeMap<>();
 				results.put("results", process.getConfigList(true));
-				JSON.encode(results, os);
+				toJsonStream(res, results);
 			} else if (params[1].equals("config") && params.length >= 3) {
-				//results.put("results", process.getConfigList().get(params[2]));
-				JSON.encode(process.getConfigList().get(params[2]), os);
+				toJsonStream(res, process.getConfigList().get(params[2]));
 			} else if (params[1].equals("mapping") && params.length >= 3) {
-				res.setStatus(HttpServletResponse.SC_OK);
 				Map<String, Object> results = new TreeMap<>();
 				results.put("results", process.getMapping(params[2]));
-				JSON.encode(results, os);
+				toJsonStream(res, results);
 			} else {
 				res.setStatus(HttpServletResponse.SC_BAD_REQUEST);
 			}
-			os.flush();
 		} catch (NoNodeAvailableException nnae) {
 			//logger.error(e.getMessage(), e);
 			res.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);

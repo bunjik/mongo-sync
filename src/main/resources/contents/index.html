@@ -405,7 +405,7 @@ app.controller('MongoSyncCtrl', function ($log, $scope, $resource, $http, $inter
 											<span x-ng-switch-default class="label label-danger">{{config.status}}</span>
 										</span>
 									</td>
-									<td class="text-center vert-align word-wrap">{{ config.lastOpTime.time ? (config.lastOpTime.time * 1000 | date:'yyyy/MM/dd HH:mm:ss') : 'never' }}</td>
+									<td class="text-center vert-align word-wrap">{{ config.lastOpTime.seconds ? (config.lastOpTime.seconds * 1000 | date:'yyyy/MM/dd HH:mm:ss') : 'never' }}</td>
 									<td class="text-right vert-align word-wrap">{{ config.syncCount | number }}</td>
 									<td class="text-center vert-align">
 										<span x-ng-show="config.status != 'RUNNING' && config.status != 'INITIAL_IMPORTING'">

@@ -16,14 +16,12 @@
 package info.bunji.mongodb.synces.rest;
 
 import java.io.IOException;
-import java.io.OutputStream;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
 
 import javax.servlet.ServletException;
-import javax.servlet.http.HttpServlet;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 
@@ -34,13 +32,12 @@ import ch.qos.logback.classic.Level;
 import ch.qos.logback.classic.filter.ThresholdFilter;
 import ch.qos.logback.classic.spi.ILoggingEvent;
 import ch.qos.logback.core.read.CyclicBufferAppender;
-import net.arnx.jsonic.JSON;
 
 /**
  * @author Fumiharu Kinoshita
  *
  */
-public class SyncLogServlet extends HttpServlet {
+public class SyncLogServlet extends AbstractRestServlet {
 
 	private Logger logger = LoggerFactory.getLogger(getClass());
 
@@ -85,14 +82,9 @@ public class SyncLogServlet extends HttpServlet {
 										event.getTimeStamp()));
 			}
 
-			res.setContentType("application/json; charset=utf-8");
-			OutputStream os = res.getOutputStream();
-			res.setStatus(HttpServletResponse.SC_OK);
-
 			Map<String, Object> results = new TreeMap<>();
 			results.put("results", resultList);
-			JSON.encode(results, os);
-			os.flush();
+			toJsonStream(res, results);
 		} catch (Exception e) {
 			res.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
 		}
@@ -105,22 +97,26 @@ public class SyncLogServlet extends HttpServlet {
 	protected void doPost(HttpServletRequest req, HttpServletResponse res) throws ServletException, IOException {
 		String[] params = req.getPathInfo().split("/");
 		if (params[1].equals("level")) {
+			// change log level
 			String oldLogLevel = logLevel;
 			logLevel = Level.toLevel(params[2], Level.INFO).toString();
 			filter.setLevel(logLevel);
 			logger.info("Last Log level changed. [{} -> {}]", oldLogLevel, logLevel);
 
-			res.setStatus(HttpServletResponse.SC_OK);
 			Map<String, Object> results = new TreeMap<>();
 			results.put("before", oldLogLevel);
 			results.put("current", logLevel);
-			OutputStream os = res.getOutputStream();
-			JSON.encode(results, os);
-			os.flush();
-			res.setContentType("application/json; charset=utf-8");
+			toJsonStream(res, results);
+//		} else if (params[1].equals("limit")) {
+//			int limit = appender.getMaxSize();
+//			
+//			appender.setMaxSize(maxSize);
+		} else {
+			res.setStatus(HttpServletResponse.SC_BAD_REQUEST);
 		}
 	}
 
+	
 	static class LogMsg {
 		private String message;
 		private String level;

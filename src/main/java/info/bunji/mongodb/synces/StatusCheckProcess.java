@@ -44,11 +44,11 @@ import org.slf4j.LoggerFactory;
 
 import com.google.common.collect.Maps;
 import com.google.common.collect.Maps.EntryTransformer;
+import com.google.gson.Gson;
 
 import info.bunji.asyncutil.AsyncExecutor;
 import info.bunji.asyncutil.AsyncProcess;
 import info.bunji.mongodb.synces.util.EsUtils;
-import net.arnx.jsonic.JSON;
 
 /**
  ************************************************
@@ -131,7 +131,9 @@ public class StatusCheckProcess extends AsyncProcess<Boolean> implements Indexer
 		Map<String, SyncConfig> configMap = new TreeMap<>();
 		for (SearchHit hit : res.getHits().getHits()) {
 			if ("config".equals(hit.getType())) {
-				SyncConfig config = JSON.decode(hit.getSourceAsString(), SyncConfig.class);
+//				SyncConfig config = JSON.decode(hit.getSourceAsString(), SyncConfig.class);
+SyncConfig config = new Gson().fromJson(hit.getSourceAsString(), SyncConfig.class);
+				
 				config.setSyncName(hit.getId());
 				configMap.put(hit.getId(), config);
 				indexNames.add(config.getIndexName());
@@ -266,6 +268,7 @@ public class StatusCheckProcess extends AsyncProcess<Boolean> implements Indexer
 				retry++;
 				interval = (long) Math.min(60, Math.pow(2, retry)) * 1000;
 				logger.warn("es connection error. (retry after {} ms)", interval);
+				logger.warn("NoNodeAvailableException", nnae);
 			} catch (Exception e) {
 				//logger.error(e.getMessage(), e);
 				logger.error(e.getMessage());
