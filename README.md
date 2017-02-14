@@ -1,6 +1,6 @@
-[![Build Status](https://img.shields.io/travis/bunjik/mongo-sync-es/master.svg)](https://travis-ci.org/bunjik/mongo-sync-es)
+[![Build Status](https://img.shields.io/travis/bunjik/mongo-sync/master.svg)](https://travis-ci.org/bunjik/mongo-sync)
 [![License](http://img.shields.io/:license-apache-blue.svg)](https://www.apache.org/licenses/LICENSE-2.0.html)
-# mongo-sync-es
+# mongo-sync
 mongodb sync to elasticsearch 2.x
 
 ## 概要
