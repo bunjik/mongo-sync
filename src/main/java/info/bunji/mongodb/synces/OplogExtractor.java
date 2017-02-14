@@ -38,8 +38,7 @@ import info.bunji.mongodb.synces.util.DocumentUtils;
 
 /**
  ************************************************
- * Mongodbのoplogデータ取得処理.
- *
+ * oplog tailable process.
  * @author Fumiharu Kinoshita
  ************************************************
  */
@@ -61,7 +60,7 @@ public class OplogExtractor extends AsyncProcess<SyncOperation> {
 	 * @param config 同期設定
 	 ********************************************
 	 */
-	OplogExtractor(SyncConfig config, BsonTimestamp ts) {
+	public OplogExtractor(SyncConfig config, BsonTimestamp ts) {
 		this.config = config;
 		if (ts != null) {
 			this.timestamp = new BsonTimestamp(ts.getTime(), ts.getInc());
@@ -101,6 +100,7 @@ public class OplogExtractor extends AsyncProcess<SyncOperation> {
 					}
 					//logger.trace("[{}] start oplog timestamp = [{}]", config.getSyncName(), timestamp);
 					config.addSyncCount(-1);	// 同期開始時に最終同期データを再度同期するため１減算しておく
+//throw new IllegalStateException("[" + syncName + "] oplog outdated.[" + timestamp + "]");
 				}
 
 				// oplogを継続的に取得
@@ -116,7 +116,7 @@ public class OplogExtractor extends AsyncProcess<SyncOperation> {
 				// get document from oplog
 				for (Document doc : results) {
 
-					// 同期対象のコレクションかチェックする
+					// check sync collection
 					String collection = getCollectionName(doc);
 					if (!config.isTargetCollection(collection)) {
 						continue;
@@ -139,7 +139,6 @@ public class OplogExtractor extends AsyncProcess<SyncOperation> {
 							Document filteredDoc = DocumentUtils.applyFieldFilter(updateDoc, includeFields, excludeFields);
 							append(new SyncOperation(operation, index, namespace, filteredDoc, timestamp));
 						}
-
 					} else if (operation == Operation.DROP_COLLECTION) {
 						// type(コレクション)のデータを全件削除
 						//logger.debug("drop collection [" + collection + "]");
@@ -165,7 +164,7 @@ public class OplogExtractor extends AsyncProcess<SyncOperation> {
 				// interrupt oplog tailable process.
 				break;
 			} catch (Throwable t) {
-				logger.error(String.format("[{}] error. [msg:{}]({})", syncName, t.getMessage(), t.getClass().getSimpleName()), t);
+				logger.error(String.format("[%s] error. [msg:%s](%s)", syncName, t.getMessage(), t.getClass().getSimpleName()), t);
 				throw t;
 			}
 		}
@@ -173,7 +172,7 @@ public class OplogExtractor extends AsyncProcess<SyncOperation> {
 
 	/**
 	 **********************************
-	 *
+	 * get collection name from oplog.
 	 * @param oplogDoc
 	 * @return
 	 **********************************

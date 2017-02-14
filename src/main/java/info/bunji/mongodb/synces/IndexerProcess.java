@@ -35,7 +35,9 @@ import org.slf4j.LoggerFactory;
 import info.bunji.asyncutil.AsyncExecutor;
 import info.bunji.asyncutil.AsyncProcess;
 import info.bunji.asyncutil.AsyncResult;
-import info.bunji.mongodb.synces.util.EsUtils;
+import info.bunji.mongodb.synces.elasticsearch.EsStatusChecker;
+import info.bunji.mongodb.synces.elasticsearch.EsTypeDeleter;
+import info.bunji.mongodb.synces.elasticsearch.EsUtils;
 
 /**
  ************************************************
@@ -72,7 +74,7 @@ public class IndexerProcess extends AsyncProcess<Boolean>
 	 * @param operations
 	 **********************************
 	 */
-	IndexerProcess(Client esClient, SyncConfig config, Listener listener, AsyncResult<SyncOperation> operations) {
+	public IndexerProcess(Client esClient, SyncConfig config, Listener listener, AsyncResult<SyncOperation> operations) {
 		this.esClient = esClient;
 		this.config = config;
 		this.operations = operations;
@@ -89,7 +91,8 @@ public class IndexerProcess extends AsyncProcess<Boolean>
 	public void execute() {
 		String syncName = config.getSyncName();
 
-		while (true) {
+		boolean hasError = false;
+		while (!hasError) {
 			logger.info("[{}] start sync.", syncName);
 			BulkProcessor processor = getBulkProcessor();
 			try {
@@ -150,15 +153,20 @@ public class IndexerProcess extends AsyncProcess<Boolean>
 				break;
 
 			} catch (IllegalArgumentException | IllegalStateException e) {
-				logger.warn(String.format("[{}] indexer bulkProcess error.(%s)", syncName, e.getMessage()), e);
+				logger.warn(String.format("[%s] indexer bulkProcess error.(%s)", syncName, e.getMessage()), e);
 			} catch(Throwable t) {
-				processor.add(EsUtils.makeStatusRequest(config, Status.STOPPED, null));
-				logger.error(String.format("[{}] indexer stopped with error.(%s)", syncName, t.getMessage()), t);
+//				processor.add(EsUtils.makeStatusRequest(config, Status.STOPPED, null));
+				logger.error(String.format("[%s] indexer stopped with error.(%s)", syncName, t.getMessage()), t);
 				throw t;
 			} finally {
 				processor.flush();
 				processor.close();
+
+				esClient.update(EsUtils.makeStatusRequest(config, Status.STOPPED, null)).actionGet();
+				EsUtils.refreshIndex(esClient, EsStatusChecker.CONFIG_INDEX);
+
 				logger.info("[{}] stop sync.", syncName);
+				hasError = true;
 			}
 		}
 	}
@@ -277,7 +285,7 @@ public class IndexerProcess extends AsyncProcess<Boolean>
 	 * イベント通知用インターフェース
 	 ********************************************
 	 */
-	static interface Listener extends EventListener {
+	public static interface Listener extends EventListener {
 		/**
 		 ******************************
 		 * indexerの停止時に呼び出されるメソッド.

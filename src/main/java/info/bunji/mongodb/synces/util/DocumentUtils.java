@@ -15,6 +15,7 @@ import org.slf4j.LoggerFactory;
 import com.mongodb.DBObject;
 
 import info.bunji.mongodb.synces.Status;
+import info.bunji.mongodb.synces.elasticsearch.EsUtils;
 
 /**
  ************************************************

@@ -18,11 +18,7 @@ package info.bunji.mongodb.synces;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.net.InetAddress;
-import java.net.InetSocketAddress;
-import java.util.HashSet;
 import java.util.Properties;
-import java.util.Set;
 
 import org.eclipse.jetty.server.Server;
 import org.eclipse.jetty.server.handler.ContextHandler;
@@ -31,18 +27,12 @@ import org.eclipse.jetty.server.handler.ResourceHandler;
 import org.eclipse.jetty.servlet.ServletContextHandler;
 import org.eclipse.jetty.servlet.ServletHolder;
 import org.eclipse.jetty.util.resource.Resource;
-import org.elasticsearch.client.Client;
-import org.elasticsearch.client.transport.TransportClient;
-import org.elasticsearch.common.settings.Settings;
-import org.elasticsearch.common.settings.Settings.Builder;
-import org.elasticsearch.common.transport.InetSocketTransportAddress;
-import org.elasticsearch.common.transport.TransportAddress;
-import org.elasticsearch.shield.ShieldPlugin;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import info.bunji.asyncutil.AsyncExecutor;
 import info.bunji.asyncutil.AsyncResult;
+import info.bunji.mongodb.synces.elasticsearch.EsStatusChecker;
 import info.bunji.mongodb.synces.rest.RestServlet;
 import info.bunji.mongodb.synces.rest.SyncLogServlet;
 
@@ -61,6 +51,8 @@ public class MongoEsSync {
 
 	public static final String DEFAULT_PORT = "1234";
 
+	public static final String PROPERTY_NAME = "settings.properties";
+
 	static {
 		// デフォルト値の設定
 		// default
@@ -77,7 +69,7 @@ public class MongoEsSync {
 	 */
 	public static void main(String[] args) throws Exception {
 
-		String propFileName = "settings.properties";
+		String propFileName = PROPERTY_NAME;
 		if (args.length > 0) {
 			propFileName = args[0];
 		}
@@ -91,44 +83,8 @@ public class MongoEsSync {
 			System.exit(1);
 		}
 
-		logger.trace(prop.toString());
-
-		Set<TransportAddress> addresses = new HashSet<>();
-		for (String host : prop.getProperty("es.hosts").split(",")) {
-			String[] addr = host.split(":");
-			String name = addr[0];
-			String port = "9300";	// default transport port
-			if (addr.length > 1) {
-				port = addr[1];
-			}
-			addresses.add(new InetSocketTransportAddress(
-							new InetSocketAddress(
-								InetAddress.getByName(name),
-								Integer.valueOf(port)
-							)
-						));
-		}
-
-		Builder settings = Settings.settingsBuilder()
-				//.put("client.transport.ignore_cluster_name", true)
-				.put("cluster.name", prop.getProperty("es.clustername"))
-				.put("transport.client.sniff", true);
-
-		// es connection with shield auth.
-		if (prop.containsKey("es.auth")) {
-			logger.info("elasticsearch connection with authentication.");
-			settings.put("shield.user", prop.getProperty("es.auth"));
-		}
-
-		final Client esClient = TransportClient.builder()
-				.addPlugin(ShieldPlugin.class)	// auth for shield plugin
-				.settings(settings.build())
-				.build()
-				.addTransportAddresses(addresses.toArray(new InetSocketTransportAddress[0]));
-
-		//logger.debug(esClient.toString());
-
-		StatusCheckProcess process = new StatusCheckProcess(esClient, CHECK_INTERVAL);
+		//StatusCheckProcess process = new StatusCheckProcess(esClient, CHECK_INTERVAL);
+		EsStatusChecker process = new EsStatusChecker(CHECK_INTERVAL);
 
 		String serverPort = prop.getProperty("server.port", DEFAULT_PORT);
 		Server server = new Server(Integer.parseInt(serverPort));
@@ -157,7 +113,7 @@ public class MongoEsSync {
 			System.exit(1);
 		}
 
-		// 監視スレッドの起動
+		// start status check process
 		final AsyncResult<Boolean> checker = AsyncExecutor.execute(process);
 
         // shutdown hook
@@ -170,7 +126,7 @@ public class MongoEsSync {
 					e.printStackTrace();
 				}
 				MongoClientService.closeAllClient();
-				esClient.close();
+				//esClient.close();
 				logger.debug("es sync stopped.");
 			}
 		});

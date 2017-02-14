@@ -1,7 +1,7 @@
 /**
  *
  */
-package info.bunji.mongodb.synces;
+package info.bunji.mongodb.synces.elasticsearch;
 
 import org.elasticsearch.action.admin.indices.exists.indices.IndicesExistsRequest;
 import org.elasticsearch.action.admin.indices.exists.indices.IndicesExistsResponse;
@@ -17,7 +17,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import info.bunji.asyncutil.AsyncProcess;
-import info.bunji.mongodb.synces.util.EsUtils;
 
 /**
  ************************************************

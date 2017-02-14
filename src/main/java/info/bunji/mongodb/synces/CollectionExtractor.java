@@ -60,7 +60,7 @@ public class CollectionExtractor extends AsyncProcess<SyncOperation> {
 	 * @param config 同期設定
 	 ********************************************
 	 */
-	CollectionExtractor(SyncConfig config, BsonTimestamp ts) {
+	public CollectionExtractor(SyncConfig config, BsonTimestamp ts) {
 		this.config = config;
 		if (ts != null) {
 			this.timestamp = new BSONTimestamp(ts.getTime(), ts.getInc());

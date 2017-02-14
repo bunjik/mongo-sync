@@ -36,8 +36,6 @@ import com.google.gson.JsonSerializer;
  */
 public class SyncOperation {
 
-	//private static final Logger logger = LoggerFactory.getLogger(SyncOperation.class);
-
 	private final Operation op;
 	private final String index;
 	private final String collection;
@@ -88,7 +86,7 @@ public class SyncOperation {
 	}
 
 	/**
-	 * ステータス更新用
+	 * for update status
 	 * @param op
 	 * @param collection
 	 * @param doc

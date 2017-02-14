@@ -27,7 +27,7 @@ import org.elasticsearch.client.transport.NoNodeAvailableException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import info.bunji.mongodb.synces.StatusCheckProcess;
+import info.bunji.mongodb.synces.StatusChecker;
 
 /**
  ************************************************
@@ -39,9 +39,9 @@ public class RestServlet extends AbstractRestServlet {
 
 	private Logger logger = LoggerFactory.getLogger(getClass());
 
-	private StatusCheckProcess process;
+	private StatusChecker process;
 
-	public RestServlet(StatusCheckProcess process) {
+	public RestServlet(StatusChecker process) {
 		this.process = process;
 	}
 
@@ -55,14 +55,14 @@ public class RestServlet extends AbstractRestServlet {
 			String[] params = req.getPathInfo().split("/");
 			if (params[1].equals("list")) {
 				Map<String, Object> results = new TreeMap<>();
-				results.put("results", process.getConfigList(true));
+				results.put("results", process.getConfigs());
 				toJsonStream(res, results);
 			} else if (params[1].equals("config") && params.length >= 3) {
-				toJsonStream(res, process.getConfigList().get(params[2]));
-			} else if (params[1].equals("mapping") && params.length >= 3) {
-				Map<String, Object> results = new TreeMap<>();
-				results.put("results", process.getMapping(params[2]));
-				toJsonStream(res, results);
+				toJsonStream(res, process.getConfigs().get(params[2]));
+//			} else if (params[1].equals("mapping") && params.length >= 3) {
+//				Map<String, Object> results = new TreeMap<>();
+//				results.put("results", process.getMapping(params[2]));
+//				toJsonStream(res, results);
 			} else {
 				res.setStatus(HttpServletResponse.SC_BAD_REQUEST);
 			}
@@ -116,7 +116,7 @@ public class RestServlet extends AbstractRestServlet {
 			if (params.length == 3 && params[1].equals("resync")) {
 				String syncName = params[2];
 
-				// stop indexer
+				// resync indexer
 				process.resyncIndexer(syncName);
 
 				logger.debug("resync started.");
@@ -138,7 +138,7 @@ public class RestServlet extends AbstractRestServlet {
 		try {
 			String[] params = req.getPathInfo().split("/");
 			if (params.length == 3 && params[1].equals("delete")) {
-				process.deleteIndexer(params[2]);
+				process.removeConfig(params[2]);
 				res.setStatus(HttpServletResponse.SC_OK);
 			} else {
 				res.setStatus(HttpServletResponse.SC_BAD_REQUEST);

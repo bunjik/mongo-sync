@@ -16,7 +16,6 @@
 <!--
         <elasticsearch.version>2.1.2</elasticsearch.version>
 -->
-
         <elasticsearch.version>2.4.3</elasticsearch.version>
   		<mongo-java-driver.version>3.2.2</mongo-java-driver.version>
 		<jetty.version>8.2.0.v20160908</jetty.version>
@@ -91,7 +90,7 @@
 		<dependency>
 			<groupId>info.bunji</groupId>
 			<artifactId>asyncutil</artifactId>
-			<version>0.1.2</version>
+			<version>0.2.0</version>
 		</dependency>
 		<dependency>
 			<groupId>org.eclipse.jetty</groupId>

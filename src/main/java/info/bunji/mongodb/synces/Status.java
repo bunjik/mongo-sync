@@ -4,16 +4,16 @@
 package info.bunji.mongodb.synces;
 
 /**
- *
+ * Sync Status
  * @author Fumiharu Kinoshita
  */
 public enum Status {
 	UNKNOWN,
-    STARTING,
+    STARTING,	// delete
     START_FAILED,
     RUNNING,
     STOPPED,
-    IMPORT_FAILED,
+//    IMPORT_FAILED,
     INITIAL_IMPORTING,
     INITIAL_IMPORT_FAILED;
 

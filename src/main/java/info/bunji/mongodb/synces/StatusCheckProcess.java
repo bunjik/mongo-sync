@@ -48,7 +48,7 @@ import com.google.gson.Gson;
 
 import info.bunji.asyncutil.AsyncExecutor;
 import info.bunji.asyncutil.AsyncProcess;
-import info.bunji.mongodb.synces.util.EsUtils;
+import info.bunji.mongodb.synces.elasticsearch.EsUtils;
 
 /**
  ************************************************
