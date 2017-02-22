@@ -54,10 +54,8 @@ public class CollectionExtractor extends AsyncProcess<SyncOperation> {
 
 	/**
 	 ********************************************
-	 *
-	 * @param client
 	 * @param ts 同期開始タイムスタンプ
-	 * @param config 同期設定
+	 * @param config sync config
 	 ********************************************
 	 */
 	public CollectionExtractor(SyncConfig config, BsonTimestamp ts) {
@@ -75,7 +73,7 @@ public class CollectionExtractor extends AsyncProcess<SyncOperation> {
 
 		Set<String> includeFields = config.getIncludeFields();
 		Set<String> excludeFields = config.getExcludeFields();
-		String index = config.getIndexName();
+		String index = config.getDestDbName();
 		String syncName = config.getSyncName();
 
 		// 初期インポート処理
@@ -93,9 +91,9 @@ public class CollectionExtractor extends AsyncProcess<SyncOperation> {
 				// 同期対象コレクション名の一覧を取得する
 				MongoDatabase db = client.getDatabase(config.getMongoDbName());
 
-				// update status
-				Document statusDoc = DocumentUtils.makeStatusDocument(Status.INITIAL_IMPORTING, null, null);
-				append(new SyncOperation(Operation.INSERT, "status", statusDoc, config.getSyncName()));
+//				// update status
+//				Document statusDoc = DocumentUtils.makeStatusDocument(Status.INITIAL_IMPORTING, null, null);
+//				append(new SyncOperation(Operation.INSERT, "status", statusDoc, config.getSyncName()));
 
 				// コレクション毎に初期同期を行う
 				Object lastId = null;
@@ -121,10 +119,10 @@ public class CollectionExtractor extends AsyncProcess<SyncOperation> {
 				}
 
 				// update status
-				statusDoc = DocumentUtils.makeStatusDocument(Status.RUNNING, null, lastOpTs);
+				Document statusDoc = DocumentUtils.makeStatusDocument(Status.RUNNING, null, lastOpTs);
 				append(new SyncOperation(Operation.UPDATE, "status", statusDoc, config.getSyncName()));
 			}
-			logger.info("[{}] extract collection finished.", syncName);
+			logger.info("[{}] import collection finished.", syncName);
 		} catch (Throwable t) {
 			config.setStatus(Status.INITIAL_IMPORT_FAILED);
 			logger.error("[{}] initial import failed.({})", syncName, t.getMessage(), t);

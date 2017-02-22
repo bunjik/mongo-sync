@@ -17,8 +17,9 @@ package info.bunji.mongodb.synces;
 
 import java.net.InetAddress;
 import java.net.UnknownHostException;
-import java.util.Collection;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.TreeSet;
@@ -40,60 +41,92 @@ public class SyncConfig {
 
 	public static final String ID_FIELD = "_id";
 
-	public static final String STATUS_INDEX = ".mongosync";
+//	public static final String STATUS_INDEX = ".mongosync";
 
-	/** 同期設定名 */
+	private String configDbName;
+
+	/** sync name */
 	private String syncName;
 
-	/** 同期対象のmongodbのデータベース名 */
+	/** target mongo database name */
 	private String mongoDbName;
 
 	/** インポート対象のコレクション名 */
 	private Set<String> importCollections = new TreeSet<>();
 
-	/** 同期先インデックス名 */
-	private String indexName;
+	/** 同期先DB名 */
+	private String destDbName;
 
-	/** 同期対象のフィールド名 */
+	/** include field names */
 	private Set<String> includeFields = new TreeSet<>();
 
-	/** 同期対象外のフィールド名 */
+	/** exclude field names */
 	private Set<String> excludeFields = new TreeSet<>();
 
-	/** 同期対象のmongodbの接続情報 */
+	/** target mongo connection setting */
 	private MongoConnection mongoConnection;
 
 	/**  */
-	//@JSONHint(ignore=true)
 	private BsonTimestamp lastOpTime = null;
 
-	/** 同期件数 */
-	//@JSONHint(ignore=true)
+	/** sync count */
 	private AtomicLong syncCount = new AtomicLong(0);
 
-	/** ステータス */
-	//@JSONHint(ignore=true)
+	/** sync status */
 	private Status status;
 
-	/** エイリアス */
-	//@JSONHint(ignore=true)
-	private transient Collection<String> aliases;
+	/** extend information */
+	private Map<String, Object> extendInfo = new HashMap<>();
 
+	/**
+	 * 
+	 */
+	public String getConfigDbName() {
+		return configDbName;
+	}
 
+	public void setConfigDbName(String configDbName) {
+		this.configDbName = configDbName;
+	}
+
+	/**
+	 **********************************
+	 * get sync name.
+	 * @return sync name
+	 **********************************
+	 */
 	public String getSyncName() {
 		return syncName;
 	}
 
+	/**
+	 **********************************
+	 * set sync name.
+	 * @param syncName sync name
+	 **********************************
+	 */
 	public void setSyncName(String syncName) {
 		this.syncName = syncName;
 	}
 
-	public String getIndexName() {
-		return indexName;
+	/**
+	 **********************************
+	 * get sync destination name.
+	 * @return dest dbname
+	 **********************************
+	 */
+	public String getDestDbName() {
+		return destDbName;
 	}
 
-	public void setIndexName(String indexName) {
-		this.indexName = indexName;
+	/**
+	 **********************************
+	 * set sync destination name.
+	 * @param destDbName
+	 **********************************
+	 */
+	public void setDestDbName(String destDbName) {
+		this.destDbName = destDbName;
 	}
 
 	public Set<String> getIncludeFields() {
@@ -122,8 +155,8 @@ public class SyncConfig {
 
 	/**
 	 ********************************************
-	 * 現在の同期件数を返す.
-	 * @return 現在の同期件数
+	 * get current sync count.
+	 * @return sync count
 	 ********************************************
 	 */
 	public long getSyncCount() {
@@ -132,7 +165,8 @@ public class SyncConfig {
 
 	/**
 	 ********************************************
-	 * 同期件数1を加算する.
+	 * increment sync count.
+	 * @return incremented sync count
 	 ********************************************
 	 */
 	public long addSyncCount() {
@@ -153,9 +187,9 @@ public class SyncConfig {
 
 	/**
 	 ********************************************
-	 * 指定数を加算し、加算後の同期件数を返す.
-	 * @param delta 加算数
-	 * @return 加算後の同期件数
+	 * increment sync count.
+	 * @param delta increment count
+	 * @return incremented sync count
 	 ********************************************
 	 */
 	public long addSyncCount(long delta) {
@@ -164,8 +198,8 @@ public class SyncConfig {
 
 	/**
 	 ********************************************
-	 * 同期対象のdb名を取得する.
-	 * @return 同期対象のdb名
+	 * get sync mongo database name.
+	 * @return mongo database name
 	 ********************************************
 	 */
 	public String getMongoDbName() {
@@ -174,18 +208,30 @@ public class SyncConfig {
 
 	/**
 	 ********************************************
-	 * 同期対象のdb名を設定する.
-	 * @param 同期対象のdb名
+	 * set sync mongo database name.
+	 * @param mongoDbName mongo database name
 	 ********************************************
 	 */
 	public void setMongoDbName(String mongoDbName) {
 		this.mongoDbName = mongoDbName;
 	}
 
+	/**
+	 ********************************************
+	 * get sync status.
+	 * @return sync status
+	 ********************************************
+	 */
 	public Status getStatus() {
 		return status;
 	}
 
+	/**
+	 ********************************************
+	 * set sync status.
+	 * @param status sync status
+	 ********************************************
+	 */
 	public void setStatus(Status status) {
 		this.status = status;
 	}
@@ -198,27 +244,10 @@ public class SyncConfig {
 		this.lastOpTime = lastOpTime;
 	}
 
-	public Collection<String> getAliases() {
-		return this.aliases;
-	}
-
-	public void setAliases(Collection<String> aliases) {
-		this.aliases = aliases;
-	}
-
-	/*
-	 * (非 Javadoc)
-	 * @see java.lang.Object#toString()
-	 */
-	@Override
-	public String toString() {
-		return ToStringBuilder.reflectionToString(this, ToStringStyle.SIMPLE_STYLE);
-	}
-
 	/**
 	 ********************************************
-	 * インポート対象のコレクション一覧を返す.
-	 * @return コレクション一覧
+	 * get sync collection names.
+	 * @return collection names
 	 ********************************************
 	 */
 	public Set<String> getImportCollections() {
@@ -227,20 +256,32 @@ public class SyncConfig {
 
 	/**
 	 ********************************************
-	 * インポート対象のコレクション一覧を返す.
-	 * @return コレクション一覧
+	 * set sync collection names.
+	 * @param importCollections collection names
 	 ********************************************
 	 */
 	public void setImportCollections(Set<String> importCollections) {
 		this.importCollections = importCollections;
 	}
 
+	public Map<String, Object> getExtendInfo() {
+		return extendInfo;
+	}
+
+	/*
+	 * (non Javadoc)
+	 * @see java.lang.Object#toString()
+	 */
+	@Override
+	public String toString() {
+		return ToStringBuilder.reflectionToString(this, ToStringStyle.SHORT_PREFIX_STYLE);
+	}
+
 	/**
 	 ********************************************
-	 * 同期対象のコレクションかを返す.
-	 * <br>
-	 * @param name チェック対象のコレクション名
-	 * @return 同期対象の場合はtrue、そうでない場合はfalseを返す。
+	 * check sync collection.
+	 * @param name check collection name
+	 * @return true if sync collection, otherwise false
 	 ********************************************
 	 */
 	public boolean isTargetCollection(String name) {
@@ -250,18 +291,20 @@ public class SyncConfig {
 	}
 
 	/*
-	 * (非 Javadoc)
+	 **********************************
+	 * (non Javadoc)
 	 * @see java.lang.Object#equals(java.lang.Object)
+	 **********************************
 	 */
 	@Override
 	public boolean equals(Object other) {
 		boolean ret = false;
-		if (other != null && other.getClass().equals(getClass())) {
+		if (other != null && other.getClass() == getClass()) {
 			SyncConfig config = (SyncConfig) other;
 
 			if (Objects.deepEquals(importCollections, config.getImportCollections())
 				&& Objects.equals(mongoDbName, config.getMongoDbName())
-				&& Objects.equals(indexName, config.getIndexName())
+				&& Objects.equals(destDbName, config.getDestDbName())
 				&& Objects.deepEquals(includeFields, config.getIncludeFields())
 				&& Objects.deepEquals(excludeFields, config.getExcludeFields())
 				&& mongoConnection.equals(config.getMongoConnection())) {
@@ -274,7 +317,6 @@ public class SyncConfig {
 	/**
 	 ********************************************
 	 * mongodbの接続情報を保持する内部クラス
-	 * @author Fumiharu Kinoshita
 	 ********************************************
 	 */
 	public static class MongoConnection {
@@ -361,7 +403,6 @@ public class SyncConfig {
 			this.port = port;
 		}
 
-		//@JSONHint(ignore=true)
 		public ServerAddress getServerAddress() throws UnknownHostException {
 			return new ServerAddress(InetAddress.getByName(host), port);
 		}

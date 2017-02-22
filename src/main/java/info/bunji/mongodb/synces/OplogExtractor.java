@@ -50,12 +50,10 @@ public class OplogExtractor extends AsyncProcess<SyncOperation> {
 	private BsonTimestamp timestamp;
 	private MongoDatabase targetDb = null;
 
-	public final int MAX_RETRY = 20;
+	public static final int MAX_RETRY = 20;
 
 	/**
 	 ********************************************
-	 *
-	 * @param client
 	 * @param ts 同期開始タイムスタンプ
 	 * @param config 同期設定
 	 ********************************************
@@ -75,7 +73,7 @@ public class OplogExtractor extends AsyncProcess<SyncOperation> {
 
 		Set<String> includeFields = config.getIncludeFields();
 		Set<String> excludeFields = config.getExcludeFields();
-		String index = config.getIndexName();
+		String index = config.getDestDbName();
 		String syncName = config.getSyncName();
 
 		// oplogからの取得処理
@@ -84,7 +82,7 @@ public class OplogExtractor extends AsyncProcess<SyncOperation> {
 			try (MongoClient client = MongoClientService.getClient(config)) {
 				retryCnt = 0;
 
-				logger.debug("[{}] start oplog extractor.", syncName);
+				logger.debug("[{}] start oplog sync.", syncName);
 
 				// check oplog timestamp outdated
 				MongoCollection<Document> oplogCollection = client.getDatabase("local").getCollection("oplog.rs");
@@ -100,7 +98,6 @@ public class OplogExtractor extends AsyncProcess<SyncOperation> {
 					}
 					//logger.trace("[{}] start oplog timestamp = [{}]", config.getSyncName(), timestamp);
 					config.addSyncCount(-1);	// 同期開始時に最終同期データを再度同期するため１減算しておく
-//throw new IllegalStateException("[" + syncName + "] oplog outdated.[" + timestamp + "]");
 				}
 
 				// oplogを継続的に取得
@@ -205,6 +202,6 @@ public class OplogExtractor extends AsyncProcess<SyncOperation> {
 	@Override
 	protected void postProcess() {
 		super.postProcess();
-		logger.info("[{}] extract oplog stopped.", config.getSyncName());
+		logger.info("[{}] oplog sync stopped.", config.getSyncName());
 	}
 }

@@ -3,6 +3,10 @@
  */
 package info.bunji.mongodb.synces.elasticsearch;
 
+import java.util.HashMap;
+import java.util.Map;
+
+import org.bson.BsonTimestamp;
 import org.elasticsearch.action.bulk.BulkItemResponse;
 import org.elasticsearch.action.bulk.BulkProcessor;
 import org.elasticsearch.action.bulk.BulkRequest;
@@ -23,13 +27,17 @@ import info.bunji.mongodb.synces.SyncOperation;
 import info.bunji.mongodb.synces.SyncProcess;
 
 /**
+ ************************************************
  * Sync process for elasticearch.
  * @author Fumiharu Kinoshita
+ ************************************************
  */
 public class EsSyncProcess extends SyncProcess implements BulkProcessor.Listener {
 
 	private final Client esClient;
 	private final String indexName;
+
+	private Map<Long, BsonTimestamp> requestOplogTs = new HashMap<>();
 
 	private BulkProcessor _processor = null;
 
@@ -47,7 +55,7 @@ public class EsSyncProcess extends SyncProcess implements BulkProcessor.Listener
 	public EsSyncProcess(Client esClient, SyncConfig config, StatusChecker listener, AsyncResult<SyncOperation> operations) {
 		super(config, operations);
 		this.esClient = esClient;
-		this.indexName = config.getIndexName();
+		this.indexName = config.getDestDbName();
 //		this.listener = listener;
 	}
 
@@ -96,7 +104,8 @@ public class EsSyncProcess extends SyncProcess implements BulkProcessor.Listener
 	@Override
 	public void doInsert(SyncOperation op) {
 		// ステータス更新リクエストの場合は、無条件に更新
-		if (EsStatusChecker.CONFIG_INDEX.equals(op.getIndex())) {
+		if (op.getDestDbName() == null) {
+			op.setDestDbName(EsStatusChecker.CONFIG_INDEX);
 			getBulkProcessor().add(makeIndexRequest(op));
 		} else if (getConfig().isTargetCollection(op.getCollection())) {
 			//同期対象チェック
@@ -143,7 +152,7 @@ public class EsSyncProcess extends SyncProcess implements BulkProcessor.Listener
 		// 削除処理はoplogとの不整合を防ぐため、同期で実行する
 		String syncName = getConfig().getSyncName();
 		logger.info(op.getOp() + " index:" + indexName + " type:" + op.getCollection());
-		AsyncExecutor.execute(new EsTypeDeleter(esClient, indexName, op.getCollection())).block();
+		AsyncExecutor.execute(new EsTypeDeleteProcess(esClient, indexName, op.getCollection())).block();
 		logger.debug("[{}] type deleted.[{}]", syncName, op.getCollection());
 
 		// ステータス更新用のリクエストを追加する
@@ -158,7 +167,7 @@ public class EsSyncProcess extends SyncProcess implements BulkProcessor.Listener
 	 ********************************************
 	 */
 	private UpdateRequest makeIndexRequest(SyncOperation op) {
-		return EsUtils.makeIndexRequest(op.getIndex(), op.getCollection(), op.getId(), op.getJson());
+		return EsUtils.makeIndexRequest(op.getDestDbName(), op.getCollection(), op.getId(), op.getJson());
 	}
 
 	/**
@@ -169,7 +178,7 @@ public class EsSyncProcess extends SyncProcess implements BulkProcessor.Listener
 	 ********************************************
 	 */
 	private DeleteRequest makeDeleteRequest(SyncOperation op) {
-		return new DeleteRequest(op.getIndex())
+		return new DeleteRequest(op.getDestDbName())
 								.type(op.getCollection())
 								.id(op.getId());
 	}
@@ -204,7 +213,13 @@ public class EsSyncProcess extends SyncProcess implements BulkProcessor.Listener
 	@Override
 	public void beforeBulk(long executionId, BulkRequest request) {
 		// ステータス更新用のリクエストを追加する
-		request.add(EsUtils.makeStatusRequest(getConfig(), null, getCurOplogTs()));
+		// FIXME ステータスのインデックスがOKで、データ同期用のインデックスがNGの場合
+		//       ステータスのみ更新されてしまう可能性があるため、ここで更新は良くない
+		//       リクエストIDに紐付けて、その時点のOplogTsを保持しておく必要がある
+		//request.add(EsUtils.makeStatusRequest(getConfig(), null, getCurOplogTs()));
+
+		// keep oplog time per executionId
+		requestOplogTs.put(executionId, getCurOplogTs());
 	}
 
 	/**
@@ -216,6 +231,9 @@ public class EsSyncProcess extends SyncProcess implements BulkProcessor.Listener
 	@Override
 	public void afterBulk(long executionId, BulkRequest request, Throwable failure) {
 		logger.error("call afterBulk() with failure. " + failure.getMessage(), failure);
+
+		// TODO if bulk process fatal error, stop sync or retry?
+		
 	}
 
 	/**
@@ -226,16 +244,50 @@ public class EsSyncProcess extends SyncProcess implements BulkProcessor.Listener
 	 */
 	@Override
 	public void afterBulk(long executionId, BulkRequest request, BulkResponse response) {
-		logger.trace(String.format("[%s] call afterBulk() size=%d, [%d ms]",
+		if (logger.isTraceEnabled()) {
+//			logger.trace(String.format("[%s] call afterBulk() executionId=%d size=%d, [%d ms]",
+//									getConfig().getSyncName(),
+//									executionId,
+//									response.getItems().length,
+//									response.getTookInMillis()));
+
+			int update = 0;
+			int delete = 0;
+			int other  = 0;
+			for (BulkItemResponse item : response) {
+				String opType = item.getOpType();
+				switch(opType) {
+				case "update" :
+					update++; break;
+				case "delete" :
+					delete++; break;
+				default :
+					other++; break;
+				}
+			}
+//			logger.trace("bulk operations [update={}/delete={}/other={}]"
+			logger.trace("[{}] bulk size=[{}] op=[update={}/delete={}/other={}] ({} ms)",
 								getConfig().getSyncName(),
 								response.getItems().length,
-								response.getTookInMillis()));
+								update, delete, other,
+								response.getTookInMillis());
+		}
+
 		for (BulkItemResponse item : response) {
 			if (item.isFailed()) {
-				logger.error("[{}] index:[{}], type:[{}] id:[{}] msg:[{}]",
+				logger.warn("[{}] index:[{}], type:[{}] id:[{}] msg:[{}]",
 								item.getItemId(), item.getIndex(), item.getType(), item.getId(),
 								item.getFailureMessage());
 			}
+		}
+
+		// update status
+		if (requestOplogTs.containsKey(executionId)) {
+			BsonTimestamp ts = requestOplogTs.remove(executionId);
+			esClient.update(EsUtils.makeStatusRequest(getConfig(), null, ts)).actionGet();
+			EsUtils.refreshIndex(esClient, EsStatusChecker.CONFIG_INDEX);
+		} else {
+			logger.warn("unknown bulk executionId({}). status not update.", executionId);
 		}
 	}
 }

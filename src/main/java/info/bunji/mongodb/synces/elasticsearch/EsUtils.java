@@ -17,10 +17,12 @@ package info.bunji.mongodb.synces.elasticsearch;
 
 import java.io.IOException;
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.TreeSet;
 
 import org.bson.BsonTimestamp;
 import org.elasticsearch.action.admin.indices.alias.get.GetAliasesRequest;
@@ -42,15 +44,13 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.carrotsearch.hppc.cursors.ObjectObjectCursor;
-import com.google.common.collect.LinkedListMultimap;
-import com.google.common.collect.ListMultimap;
 
 import info.bunji.mongodb.synces.Status;
 import info.bunji.mongodb.synces.SyncConfig;
 
 /**
  ************************************************
- *
+ * elasticsearch utilities.
  * @author Fumiharu Kinoshita
  ************************************************
  */
@@ -62,12 +62,19 @@ public class EsUtils {
 		// do nothing.
 	}
 
+//	public static void createSystemIndex(Client esClient, String indexName) {
+//		if (!isExistsIndex(esClient, indexName)) {
+//			CreateIndexRequest req = new CreateIndexRequest(indexName);
+////			req.mapping(type, source)
+//		}
+//	}
+
 	/**
 	 ********************************************
-	 * インデックスの有無を返す.
-	 * @param esClient
-	 * @param indexName インデックス名
-	 * @return 存在する場合はtrue、そうでない場合はfalseを返す
+	 * check index exists.
+	 * @param esClient elasticsearch client
+	 * @param indexName index name
+	 * @return true if index exists, otherwise false
 	 ********************************************
 	 */
 	public static boolean isExistsIndex(Client esClient, String indexName) {
@@ -80,11 +87,11 @@ public class EsUtils {
 
 	/**
 	 ********************************************
-	 * インデックス内のタイプのドキュメント有無を返す.
-	 * @param esClient
-	 * @param indexName インデックス名
-	 * @param indexName コレクション名
-	 * @return 対象typeが存在しないまたは空の場合はtrue、そうでない場合はfalseを返す
+	 * check index type empty or not exists.
+	 * @param esClient elasticsearch client
+	 * @param indexName index name
+	 * @param types type names
+	 * @return true if empty or not exists, otherwise false
 	 ********************************************
 	 */
 	public static boolean isEmptyTypes(Client esClient, String indexName, Collection<String> types) {
@@ -104,24 +111,27 @@ public class EsUtils {
 
 	/**
 	 ********************************************
-	 *インデックスが空であるかを返す.
-	 * @param esClient
-	 * @param indexName インデックス名
-	 * @return 空の場合はtrue、そうでない場合はfalseを返す
+	 * check index empty.
+	 * @param esClient elasticsearch client
+	 * @param indexName index name
+	 * @return true if index is empty, otherwise false.
 	 ********************************************
 	 */
 	public static boolean isEmptyIndex(Client esClient, String indexName) {
 		SearchHits hits = esClient.prepareSearch(indexName)
-							.setSize(0)
-							.execute()
-							.actionGet()
-							.getHits();
+								.setSize(0)
+								.execute()
+								.actionGet()
+								.getHits();
 		return (hits.getTotalHits() == 0);
 	}
 
 	/**
 	 ********************************************
-	 *
+	 * get index aliases.
+	 * @param esClient elasticsearch client
+	 * @param indexNames index names
+	 * @return alias map
 	 ********************************************
 	 */
 	public static Map<String, Collection<String>> getIndexAliases(Client esClient, List<String> indexNames) {
@@ -133,21 +143,28 @@ public class EsUtils {
 						.getAliases()
 						.iterator();
 
-		ListMultimap<String, String> aliasMap = LinkedListMultimap.create();
+		// convert result
+		Map<String, Collection<String>> aliasMap = new HashMap<>();
 		while (it.hasNext()) {
 			ObjectObjectCursor<String, List<AliasMetaData>> entry = it.next();
 			for (AliasMetaData meta : entry.value) {
-				aliasMap.put(entry.key, meta.alias());
+				Collection<String> aliases = aliasMap.get(entry.key);
+				if (aliases == null) {
+					aliases = new TreeSet<>();
+					aliasMap.put(entry.key, aliases);
+				}
+				aliases.add(meta.alias());
 			}
 		}
-		return aliasMap.asMap();
+		return aliasMap;
 	}
 
 	/**
 	 **********************************
-	 * 指定インデックスのフィールドマッピングを取得する.
-	 * @param indexName 対象インデックス名
-	 * @return インデックスのフィールドマッピング情報
+	 * get field mapping.
+	 * @param esClient elasticsearch client
+	 * @param indexName index name
+	 * @return field mappings
 	 **********************************
 	 */
 	public static Map<String, Object> getMapping(Client esClient, String indexName) {
@@ -169,10 +186,10 @@ public class EsUtils {
 
 	/**
 	 ********************************************
-	 *
-	 * @param esClient
-	 * @param indexName
-	 * @return
+	 * refresh index.
+	 * @param esClient elasticsearch client
+	 * @param indexName index name
+	 * @return true if refresh successed, otherwise false
 	 ********************************************
 	 */
 	public static boolean refreshIndex(Client esClient, String indexName) {
@@ -184,10 +201,10 @@ public class EsUtils {
 
 	/**
 	 ********************************************
-	 * 
-	 * @param esClient
-	 * @param indexName
-	 * @return
+	 * delete index.
+	 * @param esClient elasticsearch client
+	 * @param indexName index name
+	 * @return true if delete successed, otherwise false
 	 ********************************************
 	 */
 	public static boolean deleteIndex(Client esClient, String indexName) {
@@ -196,12 +213,15 @@ public class EsUtils {
 		}
 		return true;
 	}
-	
+
 	/**
 	 ********************************************
-	 * ドキュメント登録・更新用のリクエストを生成する.
-	 * @param op
-	 * @return
+	 * create document insert/updete request.
+	 * @param index index name
+	 * @param type  index type
+	 * @param id    document id
+	 * @param json  document data
+	 * @return insert/updete request
 	 ********************************************
 	 */
 	public static UpdateRequest makeIndexRequest(String index, String type, String id, String json) {
@@ -217,16 +237,16 @@ public class EsUtils {
 
 	/**
 	 ********************************************
-	 * ステータス更新用のリクエストを生成する.
-	 * @param config
-	 * @param status
-	 * @param ts
-	 * @return
+	 * create status update request.
+	 * @param config sync config
+	 * @param status sync status
+	 * @param ts mongo oplog timmestamp
+	 * @return status update request
 	 ********************************************
 	 */
 	public static UpdateRequest makeStatusRequest(SyncConfig config, Status status, BsonTimestamp ts) {
 		XContentBuilder content = makeStatusContent(status, config.getSyncCount(), ts);
-		IndexRequest insert = new IndexRequest(SyncConfig.STATUS_INDEX)
+		IndexRequest insert = new IndexRequest(config.getConfigDbName())
 				.type("status")
 				.id(config.getSyncName())
 				.source(content);
@@ -238,10 +258,10 @@ public class EsUtils {
 	/**
 	 ********************************************
 	 * ステータス更新用のJSON文字列を生成する.
-	 * @param status
-	 * @param indexCnt
-	 * @param ts
-	 * @return
+	 * @param status sync status
+	 * @param indexCnt indexed count
+	 * @param ts mongo oplog timmestamp
+	 * @return json 
 	 ********************************************
 	 */
 	public static String makeStatusJson(Status status, Long indexCnt, BsonTimestamp ts) {

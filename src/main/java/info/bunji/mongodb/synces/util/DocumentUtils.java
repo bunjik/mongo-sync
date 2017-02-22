@@ -19,7 +19,7 @@ import info.bunji.mongodb.synces.elasticsearch.EsUtils;
 
 /**
  ************************************************
- *
+ * bson document utility.
  * @author Fumiharu Kinoshita
  ************************************************
  */
@@ -31,6 +31,13 @@ public class DocumentUtils {
 		// do nothing.
 	}
 
+	/**
+	 **********************************
+	 * convert json to Bson document.
+	 * @param json json document
+	 * @return bson document
+	 **********************************
+	 */
 	public static Document fromJson(String json) {
 		return Document.parse(json);
 	}
@@ -41,11 +48,11 @@ public class DocumentUtils {
 
 	/**
 	 ********************************************
-	 *
-	 * @param orgDoc
-	 * @param includeFields
-	 * @param excludeFields
-	 * @return
+	 * apply field filter.
+	 * @param orgDoc document to filter
+	 * @param includeFields include fields
+	 * @param excludeFields exclude fields
+	 * @return filtered document
 	 ********************************************
 	 */
 	public static Document applyFieldFilter(Document orgDoc, final Set<String> includeFields, final Set<String> excludeFields) {
@@ -56,10 +63,10 @@ public class DocumentUtils {
 
 	/**
 	 ********************************************
-	 *
+	 * apply exclude field filter.
 	 * @param bsonObject
-	 * @param excludeFields
-	 * @return
+	 * @param excludeFields exclude fields
+	 * @return filtered document
 	 ********************************************
 	 */
 	private static Document applyExcludeFields(Document bsonObject, Set<String> excludeFields) {
@@ -90,10 +97,10 @@ public class DocumentUtils {
 
 	/**
 	 ********************************************
-	 *
+	 * apply include field filter.
 	 * @param bsonObject
-	 * @param includeFields
-	 * @return
+	 * @param includeFields include fields
+	 * @return filtered document
 	 ********************************************
 	 */
 	private static Document applyIncludeFields(Document bsonObject, final Set<String> includeFields) {

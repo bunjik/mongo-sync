@@ -4,33 +4,29 @@
 package info.bunji.mongodb.synces;
 
 import java.io.IOException;
+import java.util.EventListener;
 
 import org.bson.BsonTimestamp;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import info.bunji.asyncutil.AsyncProcess;
 import info.bunji.asyncutil.AsyncResult;
 
 /**
  ************************************************
- *
+ * ssync process base implementation.
  * @author Fumiharu Kinoshita
  ************************************************
  */
 public abstract class SyncProcess extends AsyncProcess<Boolean> 
 											implements StatusChangeListener {
 
-	protected Logger logger = LoggerFactory.getLogger(getClass());
-
 	private AsyncResult<SyncOperation> operations;
 	private SyncConfig config;
 	protected BsonTimestamp oplogTs;
 
 	/**
-	 * 
-	 * @param config
-	 * @param operations
+	 * @param config sync config
+	 * @param operations mongodb opelations
 	 */
 	public SyncProcess(SyncConfig config, AsyncResult<SyncOperation> operations) {
 		this.config = config;
@@ -39,7 +35,7 @@ public abstract class SyncProcess extends AsyncProcess<Boolean>
 
 	/**
 	 * 
-	 * @param e
+	 * @param e occurred exeption
 	 * @throws Exception
 	 */
 	protected void onError(Exception e) throws Exception {
@@ -170,5 +166,20 @@ public abstract class SyncProcess extends AsyncProcess<Boolean>
 		} catch (IOException e) {
 			logger.error(e.getMessage(), e);
 		}
+	}
+
+	/**
+	 ********************************************
+	 * イベント通知用インターフェース
+	 ********************************************
+	 */
+	public static interface Listener extends EventListener {
+		/**
+		 ******************************
+		 * indexerの停止時に呼び出されるメソッド.
+		 * @param syncName 同期設定名
+		 ******************************
+		 */
+		void onIndexerStop(String syncName);
 	}
 }

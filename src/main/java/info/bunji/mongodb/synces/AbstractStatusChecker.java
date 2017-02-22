@@ -15,21 +15,15 @@
  */
 package info.bunji.mongodb.synces;
 
-import java.io.FileInputStream;
-import java.io.IOException;
-import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
-import java.util.Properties;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 
 import org.bson.BsonTimestamp;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import info.bunji.asyncutil.AsyncExecutor;
 import info.bunji.asyncutil.AsyncIntervalProcess;
@@ -44,22 +38,23 @@ import info.bunji.asyncutil.AsyncResult;
  ************************************************
  */
 public abstract class AbstractStatusChecker<T> extends AsyncIntervalProcess<T>
-										implements StatusChecker, IndexerProcess.Listener {
-
-	/** logger */
-	protected Logger logger = LoggerFactory.getLogger(getClass());
+										implements StatusChecker, SyncProcess.Listener {
 
 	/** running indexer map */
 	private ConcurrentMap<String, SyncProcess> indexerMap = new ConcurrentHashMap<>();
+
+	private final int syncQueueLimit;
 
 	/**
 	 **********************************
 	 * constructor.
 	 * @param interval check Interval
+	 * @param syncQueueLimit 
 	 **********************************
 	 */
-	public AbstractStatusChecker(long interval) {
+	public AbstractStatusChecker(long interval, int syncQueueLimit) {
 		super(interval);
+		this.syncQueueLimit = syncQueueLimit;
 	}
 
 	/*
@@ -82,25 +77,22 @@ public abstract class AbstractStatusChecker<T> extends AsyncIntervalProcess<T>
 	 **********************************
 	 * create indexer.
 	 * @param config sync config
-	 * @param syncData 
-	 * @return indexer
+	 * @param syncData mongo sync data
+	 * @return created sync process
 	 **********************************
 	 */
-//	protected abstract IndexerProcess createIndexer(SyncConfig config, AsyncResult<SyncOperation> syncData);
 	protected abstract SyncProcess createSyncProcess(SyncConfig config, AsyncResult<SyncOperation> syncData);
 
 	/**
 	 **********************************
 	 * check sync status.
-	 * @param config sync config
-	 * @return if need start sync, 
+	 * @throws Exception error occurred
 	 **********************************
 	 */
 	protected void checkStatus() throws Exception {
 		Map<String, SyncConfig> configs = getConfigs();
 		for (Entry<String, SyncConfig> entry : configs.entrySet()) {
 			SyncConfig config = entry.getValue();
-
 			AsyncProcess<SyncOperation> extractor = null;
 
 			String syncName = config.getSyncName();
@@ -154,7 +146,7 @@ public abstract class AbstractStatusChecker<T> extends AsyncIntervalProcess<T>
 					BsonTimestamp ts = config.getLastOpTime();
 					procList.add(new OplogExtractor(config, ts));
 				}
-				AsyncResult<SyncOperation> result = AsyncExecutor.execute(procList, 1, 2000);
+				AsyncResult<SyncOperation> result = AsyncExecutor.execute(procList, 1, syncQueueLimit);
 				SyncProcess indexer = createSyncProcess(config, result);
 				indexerMap.put(syncName, indexer);
 				AsyncExecutor.execute(indexer);
@@ -174,7 +166,7 @@ public abstract class AbstractStatusChecker<T> extends AsyncIntervalProcess<T>
 	/**
 	 **********************************
 	 * check status
-	 * @return
+	 * @return true if continue check process, false to stop check process
 	 **********************************
 	 */
 	protected abstract boolean doCheckStatus();
@@ -182,50 +174,50 @@ public abstract class AbstractStatusChecker<T> extends AsyncIntervalProcess<T>
 	/**
 	 **********************************
 	 * update sync status.
-	 * @param config 
+	 * @param config sync config
 	 * @param status status
 	 * @param ts last sync timestamp
 	 **********************************
 	 */
 	protected abstract void updateStatus(SyncConfig config, Status status, BsonTimestamp ts);
 
-	/**
-	 **********************************
-	 * load property(with default settings).
-	 * @param filename property filename
-	 * @param defaultProps default setting.
-	 * @return loaded properties
-	 * @throws IOException 
-	 **********************************
-	 */
-	protected Properties loadProperties(String filename, Properties defaultProps) throws IOException {
-		Properties prop = new Properties(defaultProps);
-		try (InputStream is = new FileInputStream(filename)) {
-			prop.load(is);
-		} catch (IOException ioe) {
-			logger.error("propertyFile not found. [" + filename + "]");
-			throw ioe;
-		}
-		return prop;
-	}
-
-	/**
-	 **********************************
-	 * load property.
-	 * @param filename property filename
-	 * @return loaded properties
-	 * @throws IOException
-	 **********************************
-	 */
-	protected Properties loadProperties(String filename) throws IOException {
-		return loadProperties(filename, new Properties());
-	}
+//	/**
+//	 **********************************
+//	 * load property(with default settings).
+//	 * @param filename property filename
+//	 * @param defaultProps default setting.
+//	 * @return loaded properties
+//	 * @throws IOException property file load error
+//	 **********************************
+//	 */
+//	protected Properties loadProperties(String filename, Properties defaultProps) throws IOException {
+//		Properties prop = new Properties(defaultProps);
+//		try (InputStream is = new FileInputStream(filename)) {
+//			prop.load(is);
+//		} catch (IOException ioe) {
+//			logger.error("propertyFile not found. [" + filename + "]");
+//			throw ioe;
+//		}
+//		return prop;
+//	}
+//
+//	/**
+//	 **********************************
+//	 * load property.
+//	 * @param filename property filename
+//	 * @return loaded properties
+//	 * @throws IOException property file load error
+//	 **********************************
+//	 */
+//	protected Properties loadProperties(String filename) throws IOException {
+//		return loadProperties(filename, new Properties());
+//	}
 
 	/**
 	 **********************************
 	 * get indexer.
-	 * @param syncName 
-	 * @return
+	 * @param syncName sync name
+	 * @return indexer process. return null if not running indexer
 	 **********************************
 	 */
 	protected SyncProcess getIndexer(String syncName) {
@@ -235,7 +227,7 @@ public abstract class AbstractStatusChecker<T> extends AsyncIntervalProcess<T>
 	/**
 	 **********************************
 	 * get indexer list.
-	 * @return
+	 * @return running indexer names
 	 **********************************
 	 */
 	protected Set<String> getIndexerNames() {
@@ -245,8 +237,8 @@ public abstract class AbstractStatusChecker<T> extends AsyncIntervalProcess<T>
 	/**
 	 **********************************
 	 * check initial import.
-	 * @param config
-	 * @return
+	 * @param config sync config
+	 * @return true if initial import start validtion ok, otherwise false
 	 **********************************
 	 */
 	protected boolean validateInitialImport(SyncConfig config) {

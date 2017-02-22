@@ -38,7 +38,6 @@ import info.bunji.mongodb.synces.rest.SyncLogServlet;
 
 /**
  *
- *
  * @author Fumiharu Kinoshita
  */
 public class MongoEsSync {
@@ -47,25 +46,26 @@ public class MongoEsSync {
 
 	private static Properties defaultProps;
 
-	public static final long CHECK_INTERVAL = 2000;
-
 	public static final String DEFAULT_PORT = "1234";
 
 	public static final String PROPERTY_NAME = "settings.properties";
 
+	private static Properties properties;
+
 	static {
 		// デフォルト値の設定
 		// default
-		//   es.host: localhost
-		//   es.port: 9300
-		//   es.clustername: elasticsearch
+		//   common.syncQueueLimit: 2000
+		//   syncQueueLimit: 2000
 		defaultProps = new Properties();
-		defaultProps.put("es.hosts", "localhost:9300");
-		defaultProps.put("es.clustername", "elasticsearch");
-	}
+		defaultProps.put("common.syncQueueLimit", "2000");
+		defaultProps.put("common.statusCheckInterval", "2000");
+		defaultProps.put("common.server.port", "1234");
+		}
 
 	/**
-	 * @param args
+	 * @param args [0] property file name
+	 * @throws Exception 
 	 */
 	public static void main(String[] args) throws Exception {
 
@@ -74,19 +74,28 @@ public class MongoEsSync {
 			propFileName = args[0];
 		}
 
-		// 設定ファイルの読み込み(es接続設定)
-		Properties prop = new Properties(defaultProps);
+		// load properties
+		properties = new Properties(defaultProps);
 		try (InputStream is = new FileInputStream(propFileName)) {
-			prop.load(is);
+			properties.load(is);
 		} catch (Exception e) {
 			logger.error("propertyFile not found. [" + propFileName + "]");
 			System.exit(1);
 		}
 
-		//StatusCheckProcess process = new StatusCheckProcess(esClient, CHECK_INTERVAL);
-		EsStatusChecker process = new EsStatusChecker(CHECK_INTERVAL);
+		// dump common settings
+		for (String propName : properties.stringPropertyNames()) {
+			if (propName.startsWith("common.")) {
+				logger.info("Setting : {}={}", propName, properties.getProperty(propName));
+			}
+		}
 
-		String serverPort = prop.getProperty("server.port", DEFAULT_PORT);
+		AbstractStatusChecker<?> process = new EsStatusChecker(
+									Long.valueOf(properties.getProperty("common.statusCheckInterval")),
+									Integer.valueOf(properties.getProperty("common.syncQueueLimit"))
+								);
+
+		String serverPort = properties.getProperty("common.server.port");
 		Server server = new Server(Integer.parseInt(serverPort));
 
 		// static contents
@@ -109,17 +118,17 @@ public class MongoEsSync {
 		try {
 			server.start();
 		} catch (Exception e) {
-			logger.error("server start failed.", e);
+			logger.error("sync service start failed.", e);
 			System.exit(1);
 		}
 
 		// start status check process
-		final AsyncResult<Boolean> checker = AsyncExecutor.execute(process);
+		final AsyncResult<?> checker = AsyncExecutor.execute(process);
 
         // shutdown hook
 		Runtime.getRuntime().addShutdownHook(new Thread() {
 			public void run() {
-				logger.debug("es sync stopping.");
+				logger.debug("sync service stopping.");
 				try {
 					checker.close();
 				} catch (IOException e) {
@@ -127,10 +136,19 @@ public class MongoEsSync {
 				}
 				MongoClientService.closeAllClient();
 				//esClient.close();
-				logger.debug("es sync stopped.");
+				logger.debug("sync service stopped.");
 			}
 		});
 
+		// 
 		server.join();
+	}
+
+	/**
+	 * 
+	 * @return
+	 */
+	public static Properties getSettingProperties() {
+		return properties;
 	}
 }

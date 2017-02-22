@@ -25,7 +25,7 @@ import info.bunji.asyncutil.AsyncProcess;
  * @author Fumiharu Kinoshita
  ************************************************
  */
-public class EsTypeDeleter extends AsyncProcess<Boolean> {
+public class EsTypeDeleteProcess extends AsyncProcess<Boolean> {
 
 	private Logger logger = LoggerFactory.getLogger(getClass());
 
@@ -33,7 +33,7 @@ public class EsTypeDeleter extends AsyncProcess<Boolean> {
 	private String index;
 	private String type;
 
-	public EsTypeDeleter(Client esClient, String index, String type) {
+	public EsTypeDeleteProcess(Client esClient, String index, String type) {
 		this.esClient = esClient;
 		this.index = index;
 		this.type = type;

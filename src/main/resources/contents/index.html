@@ -14,7 +14,7 @@
 <script type="text/javascript" src="js/ui-bootstrap-tpls-2.1.3.min.js"></script>
 <script type="text/javascript" src="js/hotkeys.min.js"></script>
 <script type="text/javascript" src="js/ace.js"></script>
-<script type="text/javascript" src="js/ui-ace.js"></script>
+<script type="text/javascript" src="js/ui-ace.min.js"></script>
 <link rel="icon" href="images/favicon.ico" type="image/x-icon">
 
 <script type="text/ng-template" id="deleteDlg.html">
@@ -65,7 +65,10 @@
 	</div>
 	<div class="modal-body">
 		<div class="row">
+<!--
 			<div ui-ace="{ mode :'javascript' }" ng-model="code" readonly autofocus></div>
+-->
+			<div ui-ace="{ mode :'json' }" ng-model="code" readonly autofocus></div>
 		</div>
 	</div>
 	<div class="modal-footer">
@@ -258,11 +261,12 @@ app.controller('MongoSyncCtrl', function ($log, $scope, $resource, $http, $inter
 	$scope.showConfig = function(name) {
 		//$log.log('config: ' + name);
 		syncConfigs.config({'id': name}, function(data) {
-			delete data['syncCount'];
-			delete data['lastOpTime'];
-			delete data['status'];
-			delete data['aliases'];
-			$scope.showInfo("config", name, data);
+			var config = angular.copy(data);
+			delete config['syncCount'];
+			delete config['lastOpTime'];
+			delete config['status'];
+			delete config['extendInfo'];
+			$scope.showInfo("config", name, config);
 		});
 	}
 
@@ -391,7 +395,7 @@ app.controller('MongoSyncCtrl', function ($log, $scope, $resource, $http, $inter
 										<td class="vert-align">{{ syncName }}</td>
 									<td class="vert-align">{{ config.indexName }}
 										<div>
-										<span x-ng-repeat="alias in config.aliases">
+										<span x-ng-repeat="alias in config.extendInfo.aliases">
 											<span class="label label-info">{{ alias }}</span>
 											&nbsp;
 										</span>

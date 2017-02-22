@@ -41,13 +41,13 @@ public class SyncLogServlet extends AbstractRestServlet {
 
 	private Logger logger = LoggerFactory.getLogger(getClass());
 
-	private CyclicBufferAppender<ILoggingEvent> appender = null;
-
 	private static final int LOG_SIZE = 100;
 
 	private static String logLevel = "INFO";
 
-	private ThresholdFilter filter = new ThresholdFilter();
+	private transient CyclicBufferAppender<ILoggingEvent> appender = null;
+
+	private transient ThresholdFilter filter = new ThresholdFilter();
 
 	public SyncLogServlet() {
 		// UI出力用のAppender

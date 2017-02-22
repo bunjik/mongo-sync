@@ -31,13 +31,16 @@ import com.google.gson.JsonSerializationContext;
 import com.google.gson.JsonSerializer;
 
 /**
- *
+ ************************************************
+ * sync operation info.
  * @author Fumiharu Kinoshita
+ ************************************************
  */
 public class SyncOperation {
 
+	private String destDbName;
+
 	private final Operation op;
-	private final String index;
 	private final String collection;
 	private final Document  doc;
 	private final String id;
@@ -72,13 +75,21 @@ public class SyncOperation {
 				return new JsonPrimitive(src.toString());
 			}
 		});
-
 		gson = builder.create();
 	}
 
-	public SyncOperation(Operation op, String index, String collection, Document doc, Object ts) {
+	/**
+	 **********************************
+	 * @param op operartion type
+	 * @param destDbName
+	 * @param collection target collection
+	 * @param doc sync document
+	 * @param ts oplog timestamp
+	 **********************************
+	 */
+	public SyncOperation(Operation op, String destDbName, String collection, Document doc, Object ts) {
 		this.op = op;
-		this.index = index;
+		this.destDbName = destDbName;
 		this.collection = collection;
 		this.doc = doc;
 		this.id = doc != null ? doc.remove("_id").toString() : null;
@@ -86,45 +97,95 @@ public class SyncOperation {
 	}
 
 	/**
-	 * for update status
-	 * @param op
-	 * @param collection
-	 * @param doc
-	 * @param id
+	 **********************************
+	 * @param op operartion type
+	 * @param destDbName config dbName
+	 * @param collection target collection
+	 * @param doc sync document
+	 * @param id document id
+	 **********************************
 	 */
 	public SyncOperation(Operation op, String collection, Document doc, String id) {
 		this.op = op;
-		this.index = SyncConfig.STATUS_INDEX;
+		this.destDbName = null;
 		this.collection = collection;
 		this.doc = doc;
 		this.id = id;
 		this.ts = null;
 	}
 
+	/**
+	 **********************************
+	 * get oplog timestamp.
+	 * @return oplog timestamp
+	 **********************************
+	 */
 	public BsonTimestamp getTimestamp() {
 		return ts;
 	}
 
+	/**
+	 **********************************
+	 * get operation.
+	 * @return operartion type
+	 **********************************
+	 */
 	public Operation getOp() {
 		return op;
 	}
 
+	/**
+	 **********************************
+	 * get document id.
+	 * @return document id
+	 **********************************
+	 */
 	public String getId() {
 		return id;
 	}
 
-	public String getIndex() {
-		return index;
+	/**
+	 * 
+	 * @return
+	 */
+	public String getDestDbName() {
+		return destDbName;
 	}
 
+	/**
+	 * 
+	 * @param destDbName
+	 */
+	public void setDestDbName(String destDbName) {
+		this.destDbName = destDbName;
+	}
+
+	/**
+	 **********************************
+	 * get target collection.
+	 * @return target collection
+	 **********************************
+	 */
 	public String getCollection() {
 		return collection;
 	}
 
+	/**
+	 **********************************
+	 * get document.
+	 * @return document
+	 **********************************
+	 */
 	public Document getDoc() {
 		return doc;
 	}
 
+	/**
+	 **********************************
+	 * get json document .
+	 * @return json converted document
+	 **********************************
+	 */
 	public String getJson() {
 		return gson.toJson(doc);
 	}

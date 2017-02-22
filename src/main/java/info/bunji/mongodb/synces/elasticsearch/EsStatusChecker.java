@@ -18,7 +18,10 @@ package info.bunji.mongodb.synces.elasticsearch;
 import java.io.IOException;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
+import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
@@ -36,14 +39,15 @@ import org.elasticsearch.client.Client;
 import org.elasticsearch.client.transport.NoNodeAvailableException;
 import org.elasticsearch.client.transport.TransportClient;
 import org.elasticsearch.common.settings.Settings;
-import org.elasticsearch.common.settings.Settings.Builder;
 import org.elasticsearch.common.transport.InetSocketTransportAddress;
 import org.elasticsearch.common.transport.TransportAddress;
 import org.elasticsearch.index.IndexNotFoundException;
+import org.elasticsearch.plugins.Plugin;
 import org.elasticsearch.search.SearchHit;
 import org.elasticsearch.search.sort.SortBuilders;
-import org.elasticsearch.shield.ShieldPlugin;
 
+import com.google.common.collect.Maps;
+import com.google.common.collect.Maps.EntryTransformer;
 import com.google.gson.Gson;
 
 import info.bunji.asyncutil.AsyncResult;
@@ -77,6 +81,9 @@ public class EsStatusChecker extends AbstractStatusChecker<Boolean> {
 		defaultProps = new Properties();
 		defaultProps.put("es.hosts", "localhost:9300");
 		defaultProps.put("es.clustername", "elasticsearch");
+		defaultProps.put("es.bulk.actions", "3000");
+		defaultProps.put("es.bulk.interval", "500");
+		defaultProps.put("es.bulk.sizeMb", "64");
 	}
 
 	/**
@@ -86,11 +93,29 @@ public class EsStatusChecker extends AbstractStatusChecker<Boolean> {
 	 * @throws IOException
 	 **********************************
 	 */
-	public EsStatusChecker(long interval) throws IOException {
-		super(interval);
+	public EsStatusChecker(long interval, int syncQueueLimit) throws IOException {
+		super(interval, syncQueueLimit);
 		
 		// load setting.
-		Properties prop = loadProperties(MongoEsSync.PROPERTY_NAME);
+		//Properties prop = loadProperties(MongoEsSync.PROPERTY_NAME);
+		Properties prop = MongoEsSync.getSettingProperties();
+
+		for (String propName : defaultProps.stringPropertyNames()) {
+			if (!prop.containsKey(propName)) {
+				prop.put(propName, defaultProps.getProperty(propName));
+			}
+		}
+
+		// dump es settings
+		for (String propName : prop.stringPropertyNames()) {
+			if (propName.startsWith("es.")) {
+				String propValue = prop.getProperty(propName);
+				if (propName.equals("es.auth")) {
+					propValue = "*****:*****";	// mask value
+				}
+				logger.info("ES Setting : {}={}", propName, propValue);
+			}
+		}
 
 		// TODO コネクション生成は別メソッド化する？
 		
@@ -103,25 +128,33 @@ public class EsStatusChecker extends AbstractStatusChecker<Boolean> {
 				port = addr[1];
 			}
 			addresses.add(new InetSocketTransportAddress(
-						new InetSocketAddress(InetAddress.getByName(name), Integer.valueOf(port))
-						));
+						new InetSocketAddress(InetAddress.getByName(name), Integer.parseInt(port))
+					));
 		}
 
-		Builder settings = Settings.settingsBuilder()
+		Settings.Builder settings = Settings.settingsBuilder()
 				//.put("client.transport.ignore_cluster_name", true)
 				.put("cluster.name", prop.getProperty("es.clustername"))
 				.put("transport.client.sniff", true);
 
 		// es connection with shield auth.
+		Class<?> pluginClazz = null;
 		if (prop.containsKey("es.auth")) {
-			logger.info("elasticsearch connection with authentication.");
-			settings.put("shield.user", prop.getProperty("es.auth"));
+			try {
+				pluginClazz = Class.forName("org.elasticsearch.shield.ShieldPlugin");
+				logger.info("elasticsearch connection with authentication.");
+				settings.put("shield.user", prop.getProperty("es.auth"));
+			} catch (ClassNotFoundException cnfe) {
+				logger.warn("elasticsearch shield plugin not found. authentication disabled.");
+			}
 		}
 
-		esClient = TransportClient.builder()
-				.addPlugin(ShieldPlugin.class)	// auth for shield plugin
-				.settings(settings.build())
-				.build()
+		TransportClient.Builder builder = TransportClient.builder().settings(settings.build());
+		if (pluginClazz != null) {
+			// auth for shield plugin
+			builder.addPlugin((Class<Plugin>) pluginClazz);
+		}				
+		esClient = builder.build()
 				.addTransportAddresses(addresses.toArray(new InetSocketTransportAddress[0]));
 	}
 
@@ -135,7 +168,7 @@ public class EsStatusChecker extends AbstractStatusChecker<Boolean> {
 	protected boolean validateInitialImport(SyncConfig config) {
 		boolean ret = true;
 		String syncName = config.getSyncName();
-		String indexName = config.getIndexName();
+		String indexName = config.getDestDbName();
 
 		if (config.getImportCollections().isEmpty()) {
 			// all collection sync.
@@ -174,19 +207,21 @@ public class EsStatusChecker extends AbstractStatusChecker<Boolean> {
 	 */
 	@Override
 	protected boolean doCheckStatus() {
-
 		try {
 			// check status
 			checkStatus();
+
+			if (retry > 0) {
+				logger.info("es connection recovered. (retry after {})", retry);
+			}
 
 			// reset retry count.
 			retry = 0;
 	
 		} catch (IndexNotFoundException infe) {
-
 			// TODO create config index.
-			
 		} catch (NoNodeAvailableException nnae) {
+			// retry connect.
 			retry++;
 			long interval = (long) Math.min(60, Math.pow(2, retry)) * 1000;
 			logger.warn("es connection error. (retry after " + interval + " ms)", nnae);
@@ -236,6 +271,7 @@ public class EsStatusChecker extends AbstractStatusChecker<Boolean> {
 			throw new IndexNotFoundException("failed shards found.");
 		}
 
+		List<String> indexNames = new ArrayList<>();
 		Gson gson = new Gson();
 		Map<String, SyncConfig> configMap = new TreeMap<>();
 		for (SearchHit hit : res.getHits().getHits()) {
@@ -244,7 +280,9 @@ public class EsStatusChecker extends AbstractStatusChecker<Boolean> {
 			if ("config".equals(type)) {
 				SyncConfig config = gson.fromJson(hit.getSourceAsString(), SyncConfig.class);
 				config.setSyncName(syncName);
+				config.setConfigDbName(CONFIG_INDEX);
 				configMap.put(syncName, config);
+				indexNames.add(config.getDestDbName());
 			} else if ("status".equals(type) && configMap.containsKey(syncName)) {
 				SyncConfig config = configMap.get(hit.getId());
 				SyncStatus status = new SyncStatus(hit.sourceAsMap());
@@ -255,22 +293,21 @@ public class EsStatusChecker extends AbstractStatusChecker<Boolean> {
 				}
 			}
 		}
-/*
-		if (withAlias) {
-			try {
-				final Map<String, Collection<String>> aliasMap = EsUtils.getIndexAliases(esClient, indexNames);
-				configMap = Maps.transformEntries(configMap, new EntryTransformer<String, SyncConfig, SyncConfig>() {
-					@Override
-					public SyncConfig transformEntry(String key, SyncConfig value) {
-						value.setAliases(aliasMap.get(value.getIndexName()));
-						return value;
-					}
-				});
-			} catch (IndexNotFoundException e) {
-				// do nothing.
-			}
+
+		// get index aliases
+		try {
+			final Map<String, Collection<String>> aliasMap = EsUtils.getIndexAliases(esClient, indexNames);
+			configMap = Maps.transformEntries(configMap, new EntryTransformer<String, SyncConfig, SyncConfig>() {
+			@Override
+				public SyncConfig transformEntry(String syncName, SyncConfig config) {
+					config.getExtendInfo().put("aliases", aliasMap.get(config.getDestDbName()));
+					return config;
+				}
+			});
+		} catch (Exception e) {
+			// do nothing.
 		}
-*/
+
 		return configMap;
 	}
 
@@ -289,7 +326,7 @@ public class EsStatusChecker extends AbstractStatusChecker<Boolean> {
 			SyncConfig config = getConfigs().get(syncName);
 			if (config != null) {
 				// delete index
-				String indexName = config.getIndexName();
+				String indexName = config.getDestDbName();
 				if (EsUtils.deleteIndex(esClient, indexName)) {
 					// delete sync status
 					esClient.prepareDelete(CONFIG_INDEX, "status", syncName)

@@ -26,16 +26,16 @@ public interface StatusChecker {
 	/**
 	 **********************************
 	 * get sync configs.
-	 * @return
+	 * @return sync config
 	 **********************************
 	 */
 	Map<String, SyncConfig> getConfigs();
 
 	/**
 	 **********************************
-	 * 
-	 * @param syncName 
-	 * @return 
+	 * check sync process running.
+	 * @param syncName sync name
+	 * @return true if sync process running, otherwise false
 	 **********************************
 	 */
 	boolean isRunning(final String syncName);
@@ -43,8 +43,8 @@ public interface StatusChecker {
 	/**
 	 **********************************
 	 * start indexer.
-	 * @param syncName
-	 * @return
+	 * @param syncName sync name
+	 * @return true if start process successed, otherwise false
 	 **********************************
 	 */
 	boolean startIndexer(String syncName);
@@ -52,8 +52,8 @@ public interface StatusChecker {
 	/**
 	 **********************************
 	 * stop indexer.
-	 * @param syncName 
-	 * @return
+	 * @param syncName sync name
+	 * @return true if stop process successed, otherwise false
 	 **********************************
 	 */
 	boolean stopIndexer(String syncName);
@@ -61,9 +61,8 @@ public interface StatusChecker {
 	/**
 	 **********************************
 	 * resync indexer.
-	 * <br>
-	 * default implement do nothing.
-	 * @param syncName
+	 * @param syncName sync name
+	 * @return true if resync process successed, otherwise false
 	 **********************************
 	 */
 	boolean resyncIndexer(String syncName);
@@ -71,8 +70,8 @@ public interface StatusChecker {
 	/**
 	 **********************************
 	 * remove sync congig.
-	 * @param syncName
-	 * @return
+	 * @param syncName sync name
+	 * @return true if remove config successed, otherwise false
 	 **********************************
 	 */
 	boolean removeConfig(String syncName);
