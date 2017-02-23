@@ -41,9 +41,9 @@ public class SyncLogServlet extends AbstractRestServlet {
 
 	private Logger logger = LoggerFactory.getLogger(getClass());
 
-	private static final int LOG_SIZE = 100;
+	private static final int LOG_SIZE = 200;
 
-	private static String logLevel = "INFO";
+	private static String logLevel = "TRACE";
 
 	private transient CyclicBufferAppender<ILoggingEvent> appender = null;
 

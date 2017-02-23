@@ -13,11 +13,8 @@
 		<java.version>1.7</java.version>
 		<maven.compiler.source>1.7</maven.compiler.source>
 		<maven.compiler.target>1.7</maven.compiler.target>
-<!--
-        <elasticsearch.version>2.1.2</elasticsearch.version>
--->
-        <elasticsearch.version>2.4.3</elasticsearch.version>
-  		<mongo-java-driver.version>3.2.2</mongo-java-driver.version>
+		<elasticsearch.version>2.4.3</elasticsearch.version>
+		<mongo-java-driver.version>3.2.2</mongo-java-driver.version>
 		<jetty.version>8.2.0.v20160908</jetty.version>
 		<maven.test.skip>false</maven.test.skip>
 		<dryRun>true</dryRun>
@@ -61,7 +58,7 @@
 	<repositories>
 		<repository>
 			<id>elasticsearch-releases</id>
-			<url>https://maven.elasticsearch.org</url>
+			<url>https://maven.elasticsearch.org/releases</url>
 			<releases>
 				<enabled>true</enabled>
 			</releases>
