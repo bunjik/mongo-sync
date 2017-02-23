@@ -82,7 +82,7 @@ public class OplogExtractor extends AsyncProcess<SyncOperation> {
 			try (MongoClient client = MongoClientService.getClient(config)) {
 				retryCnt = 0;
 
-				logger.debug("[{}] start oplog sync.", syncName);
+				logger.info("[{}] start oplog sync.", syncName);
 
 				// check oplog timestamp outdated
 				MongoCollection<Document> oplogCollection = client.getDatabase("local").getCollection("oplog.rs");

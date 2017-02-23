@@ -5,8 +5,11 @@ package info.bunji.mongodb.synces.elasticsearch;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Properties;
 
 import org.bson.BsonTimestamp;
+import org.elasticsearch.ElasticsearchException;
+import org.elasticsearch.action.ActionRequest;
 import org.elasticsearch.action.bulk.BulkItemResponse;
 import org.elasticsearch.action.bulk.BulkProcessor;
 import org.elasticsearch.action.bulk.BulkRequest;
@@ -20,6 +23,7 @@ import org.elasticsearch.common.unit.TimeValue;
 
 import info.bunji.asyncutil.AsyncExecutor;
 import info.bunji.asyncutil.AsyncResult;
+import info.bunji.mongodb.synces.MongoEsSync;
 import info.bunji.mongodb.synces.Status;
 import info.bunji.mongodb.synces.StatusChecker;
 import info.bunji.mongodb.synces.SyncConfig;
@@ -41,9 +45,13 @@ public class EsSyncProcess extends SyncProcess implements BulkProcessor.Listener
 
 	private BulkProcessor _processor = null;
 
-	private static final int  DEFAULT_BUlK_ACTIONS = 3000;	// size
-	private static final long DEFAULT_BUlK_INTERVAL = 500;	// ms
-	private static final long DEFAULT_BULK_SIZE = 64; // MB
+//	private static final int  DEFAULT_BUlK_ACTIONS = 3000;	// size
+//	private static final long DEFAULT_BUlK_INTERVAL = 500;	// ms
+//	private static final long DEFAULT_BULK_SIZE = 64; // MB
+
+	private final int DEFAULT_BUlK_ACTIONS;
+	private final long DEFAULT_BUlK_INTERVAL;
+	private final long DEFAULT_BULK_SIZE;
 
 	/**
 	 **********************************
@@ -57,6 +65,11 @@ public class EsSyncProcess extends SyncProcess implements BulkProcessor.Listener
 		this.esClient = esClient;
 		this.indexName = config.getDestDbName();
 //		this.listener = listener;
+		
+		Properties prop = MongoEsSync.getSettingProperties();
+		DEFAULT_BUlK_ACTIONS = Integer.valueOf(prop.getProperty("es.bulk.actions"));
+		DEFAULT_BUlK_INTERVAL = Long.valueOf(prop.getProperty("es.bulk.interval"));
+		DEFAULT_BULK_SIZE = Long.valueOf(prop.getProperty("es.bulk.sizeMb"));
 	}
 
 	/*
@@ -155,7 +168,7 @@ public class EsSyncProcess extends SyncProcess implements BulkProcessor.Listener
 		AsyncExecutor.execute(new EsTypeDeleteProcess(esClient, indexName, op.getCollection())).block();
 		logger.debug("[{}] type deleted.[{}]", syncName, op.getCollection());
 
-		// ステータス更新用のリクエストを追加する
+		// TODO ステータス更新用のリクエストを追加する
 		getBulkProcessor().add(EsUtils.makeStatusRequest(getConfig(), null, oplogTs));
 	}
 
@@ -212,12 +225,6 @@ public class EsSyncProcess extends SyncProcess implements BulkProcessor.Listener
 	 */
 	@Override
 	public void beforeBulk(long executionId, BulkRequest request) {
-		// ステータス更新用のリクエストを追加する
-		// FIXME ステータスのインデックスがOKで、データ同期用のインデックスがNGの場合
-		//       ステータスのみ更新されてしまう可能性があるため、ここで更新は良くない
-		//       リクエストIDに紐付けて、その時点のOplogTsを保持しておく必要がある
-		//request.add(EsUtils.makeStatusRequest(getConfig(), null, getCurOplogTs()));
-
 		// keep oplog time per executionId
 		requestOplogTs.put(executionId, getCurOplogTs());
 	}
@@ -230,10 +237,38 @@ public class EsSyncProcess extends SyncProcess implements BulkProcessor.Listener
 	 */
 	@Override
 	public void afterBulk(long executionId, BulkRequest request, Throwable failure) {
-		logger.error("call afterBulk() with failure. " + failure.getMessage(), failure);
-
-		// TODO if bulk process fatal error, stop sync or retry?
+		int update = 0;
+		int delete = 0;
+		int other  = 0;
+		for (ActionRequest<?> req : request.requests()) {
+			if (req instanceof UpdateRequest) {
+				update++;
+			} else if (req instanceof DeleteRequest) {
+				delete++;
+			} else {
+				other++;
+			}
+		}
 		
+		logger.error(String.format("[%s] bulk failure. size=[%d] op=[update={}/delete={}/other={}] : %s", 
+									getConfig().getSyncName(),
+									request.requests().size(),
+									update, delete, other,
+									failure.getMessage()
+								), failure);
+
+//		if (failure instanceof UnavailableShardsException) {
+//			// shard status error.
+//			// TODO if bulk process fatal error, stop sync or retry?
+//		}
+
+		try {
+			// try update sratus
+			esClient.update(EsUtils.makeStatusRequest(getConfig(), Status.STOPPED, null)).actionGet();
+			EsUtils.refreshIndex(esClient, EsStatusChecker.CONFIG_INDEX);
+		} catch (Throwable t) {
+			throw new ElasticsearchException(failure.getMessage(), failure);
+		}
 	}
 
 	/**
@@ -245,12 +280,6 @@ public class EsSyncProcess extends SyncProcess implements BulkProcessor.Listener
 	@Override
 	public void afterBulk(long executionId, BulkRequest request, BulkResponse response) {
 		if (logger.isTraceEnabled()) {
-//			logger.trace(String.format("[%s] call afterBulk() executionId=%d size=%d, [%d ms]",
-//									getConfig().getSyncName(),
-//									executionId,
-//									response.getItems().length,
-//									response.getTookInMillis()));
-
 			int update = 0;
 			int delete = 0;
 			int other  = 0;
@@ -265,7 +294,6 @@ public class EsSyncProcess extends SyncProcess implements BulkProcessor.Listener
 					other++; break;
 				}
 			}
-//			logger.trace("bulk operations [update={}/delete={}/other={}]"
 			logger.trace("[{}] bulk size=[{}] op=[update={}/delete={}/other={}] ({} ms)",
 								getConfig().getSyncName(),
 								response.getItems().length,
