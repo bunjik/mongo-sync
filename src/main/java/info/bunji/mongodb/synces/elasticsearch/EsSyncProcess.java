@@ -45,10 +45,6 @@ public class EsSyncProcess extends SyncProcess implements BulkProcessor.Listener
 
 	private BulkProcessor _processor = null;
 
-//	private static final int  DEFAULT_BUlK_ACTIONS = 3000;	// size
-//	private static final long DEFAULT_BUlK_INTERVAL = 500;	// ms
-//	private static final long DEFAULT_BULK_SIZE = 64; // MB
-
 	private final int DEFAULT_BUlK_ACTIONS;
 	private final long DEFAULT_BUlK_INTERVAL;
 	private final long DEFAULT_BULK_SIZE;
@@ -60,11 +56,10 @@ public class EsSyncProcess extends SyncProcess implements BulkProcessor.Listener
 	 * @param operations
 	 **********************************
 	 */
-	public EsSyncProcess(Client esClient, SyncConfig config, StatusChecker listener, AsyncResult<SyncOperation> operations) {
+	public EsSyncProcess(Client esClient, SyncConfig config, StatusChecker<?> listener, AsyncResult<SyncOperation> operations) {
 		super(config, operations);
 		this.esClient = esClient;
 		this.indexName = config.getDestDbName();
-//		this.listener = listener;
 		
 		Properties prop = MongoEsSync.getSettingProperties();
 		DEFAULT_BUlK_ACTIONS = Integer.valueOf(prop.getProperty("es.bulk.actions"));
@@ -294,11 +289,11 @@ public class EsSyncProcess extends SyncProcess implements BulkProcessor.Listener
 					other++; break;
 				}
 			}
-			logger.trace("[{}] bulk size=[{}] op=[update={}/delete={}/other={}] ({} ms)",
+			logger.trace(String.format("[%s] bulk size=[%4d] op=[update=%d/delete=%d/other=%d](%d ms)",
 								getConfig().getSyncName(),
 								response.getItems().length,
 								update, delete, other,
-								response.getTookInMillis());
+								response.getTookInMillis()));
 		}
 
 		for (BulkItemResponse item : response) {

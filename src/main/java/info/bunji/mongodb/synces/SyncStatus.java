@@ -22,6 +22,7 @@ public final class SyncStatus {
 
 	public SyncStatus(Map<String, Object> map) {
 		this.status = Status.fromString(map.get("status"));
+		@SuppressWarnings("unchecked")
 		Map<String, Number> ts = (Map<String, Number>) map.get("lastOpTime");
 		if (ts != null) {
 			int sec = ts.get("seconds").intValue();

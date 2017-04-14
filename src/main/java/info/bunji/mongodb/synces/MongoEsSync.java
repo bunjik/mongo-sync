@@ -90,7 +90,7 @@ public class MongoEsSync {
 			}
 		}
 
-		AbstractStatusChecker<?> process = new EsStatusChecker(
+		StatusChecker<?> process = new EsStatusChecker(
 									Long.valueOf(properties.getProperty("common.statusCheckInterval")),
 									Integer.valueOf(properties.getProperty("common.syncQueueLimit"))
 								);

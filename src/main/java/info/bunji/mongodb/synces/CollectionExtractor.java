@@ -81,11 +81,11 @@ public class CollectionExtractor extends AsyncProcess<SyncOperation> {
 			if (timestamp == null) {
 				logger.info("[{}] start initial import from db [{}]", syncName, config.getMongoDbName());
 
-				// 処理開始時点のoplogの最終タイムスタンプを取得しておく
-				MongoCollection<Document> oplog  = client.getDatabase("local").getCollection("oplog.rs");
-				Document lastOp = oplog.find().sort(new BasicDBObject("$natural", -1)).limit(1).first();
-				BsonTimestamp lastOpTs = lastOp.get("ts", BsonTimestamp.class);
+//				// 処理開始時点のoplogの最終タイムスタンプを取得しておく
 
+
+				BsonTimestamp lastOpTs = config.getLastOpTime();
+				
 				logger.debug("[{}] current oplog timestamp = [{}]", syncName, lastOpTs.toString());
 
 				// 同期対象コレクション名の一覧を取得する
@@ -118,6 +118,9 @@ public class CollectionExtractor extends AsyncProcess<SyncOperation> {
 					logger.info("[{}] initial import finished. [{}(total:{})]", syncName, collection, processed);
 				}
 
+				// おまじない
+				Thread.sleep(5000);
+				
 				// update status
 				Document statusDoc = DocumentUtils.makeStatusDocument(Status.RUNNING, null, lastOpTs);
 				append(new SyncOperation(Operation.UPDATE, "status", statusDoc, config.getSyncName()));

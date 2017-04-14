@@ -42,6 +42,7 @@ import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.transport.InetSocketTransportAddress;
 import org.elasticsearch.common.transport.TransportAddress;
 import org.elasticsearch.index.IndexNotFoundException;
+import org.elasticsearch.plugin.deletebyquery.DeleteByQueryPlugin;
 import org.elasticsearch.plugins.Plugin;
 import org.elasticsearch.search.SearchHit;
 import org.elasticsearch.search.sort.SortBuilders;
@@ -51,9 +52,9 @@ import com.google.common.collect.Maps.EntryTransformer;
 import com.google.gson.Gson;
 
 import info.bunji.asyncutil.AsyncResult;
-import info.bunji.mongodb.synces.AbstractStatusChecker;
 import info.bunji.mongodb.synces.MongoEsSync;
 import info.bunji.mongodb.synces.Status;
+import info.bunji.mongodb.synces.StatusChecker;
 import info.bunji.mongodb.synces.SyncConfig;
 import info.bunji.mongodb.synces.SyncOperation;
 import info.bunji.mongodb.synces.SyncProcess;
@@ -66,7 +67,7 @@ import info.bunji.mongodb.synces.SyncStatus;
  * @author Fumiharu Kinoshita
  ************************************************
  */
-public class EsStatusChecker extends AbstractStatusChecker<Boolean> {
+public class EsStatusChecker extends StatusChecker<Boolean> {
 
 	private static Properties defaultProps;
 
@@ -153,7 +154,9 @@ public class EsStatusChecker extends AbstractStatusChecker<Boolean> {
 		if (pluginClazz != null) {
 			// auth for shield plugin
 			builder.addPlugin((Class<Plugin>) pluginClazz);
-		}				
+		}
+		builder.addPlugin(DeleteByQueryPlugin.class);
+
 		esClient = builder.build()
 				.addTransportAddresses(addresses.toArray(new InetSocketTransportAddress[0]));
 	}
@@ -252,11 +255,11 @@ public class EsStatusChecker extends AbstractStatusChecker<Boolean> {
 	/*
 	 **********************************
 	 * (non Javadoc)
-	 * @see info.bunji.mongodb.synces.StatusChecker#getConfigs()
+	 * @see info.bunji.mongodb.synces.StatusChecker#getConfigs(boolean withExtendInfo)
 	 **********************************
 	 */
 	@Override
-	public Map<String, SyncConfig> getConfigs() {
+	public Map<String, SyncConfig> getConfigs(boolean withExtendInfo) {
 		// get configs from elasticsearch.
 		SearchResponse res = esClient.prepareSearch(CONFIG_INDEX)
 				.setTypes("config", "status")
@@ -295,19 +298,20 @@ public class EsStatusChecker extends AbstractStatusChecker<Boolean> {
 		}
 
 		// get index aliases
-		try {
-			final Map<String, Collection<String>> aliasMap = EsUtils.getIndexAliases(esClient, indexNames);
-			configMap = Maps.transformEntries(configMap, new EntryTransformer<String, SyncConfig, SyncConfig>() {
-			@Override
-				public SyncConfig transformEntry(String syncName, SyncConfig config) {
-					config.getExtendInfo().put("aliases", aliasMap.get(config.getDestDbName()));
-					return config;
-				}
-			});
-		} catch (Exception e) {
-			// do nothing.
+		if (withExtendInfo) {
+			try {
+				final Map<String, Collection<String>> aliasMap = EsUtils.getIndexAliases(esClient, indexNames);
+				configMap = Maps.transformEntries(configMap, new EntryTransformer<String, SyncConfig, SyncConfig>() {
+				@Override
+					public SyncConfig transformEntry(String syncName, SyncConfig config) {
+						config.getExtendInfo().put("aliases", aliasMap.get(config.getDestDbName()));
+						return config;
+					}
+				});
+			} catch (Exception e) {
+				// do nothing.
+			}
 		}
-
 		return configMap;
 	}
 

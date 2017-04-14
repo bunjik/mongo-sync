@@ -350,21 +350,6 @@ app.controller('MongoSyncCtrl', function ($log, $scope, $resource, $http, $inter
 				</button>
 				<a class="navbar-brand" href="#">MongoDB Sync Administration</a>
 			</div>
-<!--
-			<div class="collapse navbar-collapse" id="nav-menu-1">
-				<ul class="nav navbar-nav _navbar-right">
-					<li class="dropdown" x-uib-dropdown>
-						<a role="button" class="dropdown-toggle" x-uib-dropdown-toggle>
-							Settings <b class="caret"></b>
-						</a>
-						<ul class="dropdown-menu">
-							<li><a href="#">ES Status</a></li>
-							<li><a href="#">Another action</a></li>
-						</ul>
-					</li>
-				</ul>
-			</div>
--->
 			<span class="pull-right">Last update: {{ lastUpdate ? (lastUpdate | date:'yyyy-MM-dd HH:mm:ss') : '' }}&nbsp;</span>
 		</div>
 	</nav>
@@ -393,7 +378,7 @@ app.controller('MongoSyncCtrl', function ($log, $scope, $resource, $http, $inter
 							<tbody>
 								<tr x-ng-repeat="(syncName, config) in configs" x-ng-class="{'danger' : config.status.endsWith('FAILED') }">
 										<td class="vert-align">{{ syncName }}</td>
-									<td class="vert-align">{{ config.indexName }}
+									<td class="vert-align">{{ config.destDbName }}
 										<div>
 										<span x-ng-repeat="alias in config.extendInfo.aliases">
 											<span class="label label-info">{{ alias }}</span>

@@ -82,7 +82,7 @@ public class OplogExtractor extends AsyncProcess<SyncOperation> {
 			try (MongoClient client = MongoClientService.getClient(config)) {
 				retryCnt = 0;
 
-				logger.info("[{}] start oplog sync.", syncName);
+				logger.info("[{}] starting oplog sync.", syncName);
 
 				// check oplog timestamp outdated
 				MongoCollection<Document> oplogCollection = client.getDatabase("local").getCollection("oplog.rs");
@@ -98,7 +98,19 @@ public class OplogExtractor extends AsyncProcess<SyncOperation> {
 					}
 					//logger.trace("[{}] start oplog timestamp = [{}]", config.getSyncName(), timestamp);
 					config.addSyncCount(-1);	// 同期開始時に最終同期データを再度同期するため１減算しておく
+
+					BsonTimestamp tmpTs = results.first().get("ts", BsonTimestamp.class);
+					if (!tmpTs.equals(timestamp)) {
+						// 一致しない場合、mongoのデータが過去に戻っている可能性があるため
+						// 取得できた最新のタイムスタンプから同期を再開する
+						timestamp = tmpTs;
+						config.setLastOpTime(timestamp);
+						Document statusDoc = DocumentUtils.makeStatusDocument(Status.RUNNING, null, timestamp);
+						append(new SyncOperation(Operation.UPDATE, "status", statusDoc, config.getSyncName()));
+					}
 				}
+
+				logger.info("[{}] start oplog sync. [oplog timestamp:{}]", syncName, timestamp);
 
 				// oplogを継続的に取得
 				targetDb = client.getDatabase(config.getMongoDbName());

@@ -39,9 +39,9 @@ public class RestServlet extends AbstractRestServlet {
 
 	private Logger logger = LoggerFactory.getLogger(getClass());
 
-	private StatusChecker process;
+	private StatusChecker<?> process;
 
-	public RestServlet(StatusChecker process) {
+	public RestServlet(StatusChecker<?> process) {
 		this.process = process;
 	}
 
@@ -55,7 +55,7 @@ public class RestServlet extends AbstractRestServlet {
 			String[] params = req.getPathInfo().split("/");
 			if (params[1].equals("list")) {
 				Map<String, Object> results = new TreeMap<>();
-				results.put("results", process.getConfigs());
+				results.put("results", process.getConfigs(true));
 				toJsonStream(res, results);
 			} else if (params[1].equals("config") && params.length >= 3) {
 				toJsonStream(res, process.getConfigs().get(params[2]));
