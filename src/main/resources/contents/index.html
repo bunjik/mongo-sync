@@ -5,8 +5,6 @@
 <title>MongoDB Sync for ElasticSearch</title>
 <link rel="stylesheet" href="css/bootstrap.min.css">
 <link rel="stylesheet" href="css/theme.min.css">
-<!--
--->
 
 <link rel="stylesheet" href="css/app.css">
 <script type="text/javascript" src="js/angular.min.js"></script>
@@ -146,7 +144,7 @@ app.controller('MongoSyncCtrl', function ($log, $scope, $resource, $http, $inter
 				templateUrl: 'deleteDlg.html',
 				controller: 'deleteDlgCtrl',
 				scope : $scope,
-				size : "sm",
+				size : "sm", // sm,md,lg
 				resolve: {
 					params: function () {
 						return { syncName : syncName };
@@ -162,7 +160,7 @@ app.controller('MongoSyncCtrl', function ($log, $scope, $resource, $http, $inter
 				templateUrl: 'resyncDlg.html',
 				controller: 'resyncDlgCtrl',
 				scope : $scope,
-				size : "sm",
+				size : "md", // sm,md,lg
 				resolve: {
 					params: function () {
 						return { syncName : syncName };
@@ -304,6 +302,7 @@ app.controller('MongoSyncCtrl', function ($log, $scope, $resource, $http, $inter
 			cache: false
 		}).then(function(res) {
 			$scope.logs = res.data.results;
+			$scope.lastUpdate = Date.parse(res.headers("Date"));
 		})['finally'](function() {
 			$scope.isLoading = false;
 		});
@@ -313,7 +312,7 @@ app.controller('MongoSyncCtrl', function ($log, $scope, $resource, $http, $inter
 		$scope.list();
 		$scope.getLog();
 		$scope.isLoading = false;
-		$scope.lastUpdate = new Date();
+		//$scope.lastUpdate = new Date();
 	}
 
 	$scope.setReload = function(interval) {

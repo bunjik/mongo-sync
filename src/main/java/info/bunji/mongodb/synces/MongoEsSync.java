@@ -96,8 +96,10 @@ public class MongoEsSync {
 								);
 
 		String serverPort = properties.getProperty("common.server.port");
-		Server server = new Server(Integer.parseInt(serverPort));
-
+		final Server server = new Server(Integer.parseInt(serverPort));
+		server.setSendDateHeader(true);
+		server.setSendServerVersion(false);
+		
 		// static contents
 		ResourceHandler rh = new ResourceHandler();
 		rh.setBaseResource(Resource.newClassPathResource("contents"));
@@ -135,12 +137,14 @@ public class MongoEsSync {
 					e.printStackTrace();
 				}
 				MongoClientService.closeAllClient();
-				//esClient.close();
-				logger.debug("sync service stopped.");
+
+				logger.info("shutting down server.");
+				server.getGracefulShutdown();
+
+				logger.info("sync service stopped.");
 			}
 		});
 
-		// 
 		server.join();
 	}
 
