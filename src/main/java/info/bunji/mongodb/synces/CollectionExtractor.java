@@ -20,7 +20,6 @@ import java.util.Set;
 import org.bson.BasicBSONObject;
 import org.bson.BsonTimestamp;
 import org.bson.Document;
-import org.bson.types.BSONTimestamp;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -48,7 +47,7 @@ public class CollectionExtractor extends AsyncProcess<SyncOperation> {
 	private Logger logger = LoggerFactory.getLogger(getClass());
 
 	private SyncConfig config;
-	private BSONTimestamp timestamp;
+	private BsonTimestamp timestamp;
 
 	private static final long LOGGING_INTERVAL = 5000;
 
@@ -60,9 +59,7 @@ public class CollectionExtractor extends AsyncProcess<SyncOperation> {
 	 */
 	public CollectionExtractor(SyncConfig config, BsonTimestamp ts) {
 		this.config = config;
-		if (ts != null) {
-			this.timestamp = new BSONTimestamp(ts.getTime(), ts.getInc());
-		}
+		timestamp = ts;
 	}
 
 	/*
@@ -81,19 +78,13 @@ public class CollectionExtractor extends AsyncProcess<SyncOperation> {
 			if (timestamp == null) {
 				logger.info("[{}] start initial import from db [{}]", syncName, config.getMongoDbName());
 
-//				// 処理開始時点のoplogの最終タイムスタンプを取得しておく
-
-
-				BsonTimestamp lastOpTs = config.getLastOpTime();
+				// 処理開始時点のoplogの最終タイムスタンプを取得しておく
+				//BsonTimestamp lastOpTs = config.getLastOpTime();
 				
-				logger.debug("[{}] current oplog timestamp = [{}]", syncName, lastOpTs.toString());
+				//logger.debug("[{}] current oplog timestamp = [{}]", syncName, lastOpTs.toString());
 
 				// 同期対象コレクション名の一覧を取得する
 				MongoDatabase db = client.getDatabase(config.getMongoDbName());
-
-//				// update status
-//				Document statusDoc = DocumentUtils.makeStatusDocument(Status.INITIAL_IMPORTING, null, null);
-//				append(new SyncOperation(Operation.INSERT, "status", statusDoc, config.getSyncName()));
 
 				// コレクション毎に初期同期を行う
 				Object lastId = null;
@@ -117,15 +108,12 @@ public class CollectionExtractor extends AsyncProcess<SyncOperation> {
 					}
 					logger.info("[{}] initial import finished. [{}(total:{})]", syncName, collection, processed);
 				}
-
-				// おまじない
-				Thread.sleep(5000);
-				
-				// update status
-				Document statusDoc = DocumentUtils.makeStatusDocument(Status.RUNNING, null, lastOpTs);
-				append(new SyncOperation(Operation.UPDATE, "status", statusDoc, config.getSyncName()));
 			}
 			logger.info("[{}] import collection finished.", syncName);
+			
+			Document statusDoc = DocumentUtils.makeStatusDocument(Status.RUNNING, null, timestamp);
+			append(new SyncOperation(Operation.UPDATE, "status", statusDoc, config.getSyncName()));
+			
 		} catch (Throwable t) {
 			config.setStatus(Status.INITIAL_IMPORT_FAILED);
 			logger.error("[{}] initial import failed.({})", syncName, t.getMessage(), t);

@@ -9,6 +9,8 @@ import java.util.Set;
 
 import org.bson.BsonTimestamp;
 import org.bson.Document;
+import org.joda.time.format.DateTimeFormat;
+import org.joda.time.format.DateTimeFormatter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -61,6 +63,19 @@ public class DocumentUtils {
 		return filterdDoc;
     }
 
+	/**
+	 ********************************************
+	 * convert BsonTimestamp to Date string.
+	 * @param ts BsonTimestamp
+	 * @return converted Date
+	 ********************************************
+	 */
+	public static String toDateStr(BsonTimestamp ts) {
+		//DateTimeFormatter formatter = DateTimeFormat.mediumDateTime();
+		DateTimeFormatter formatter = DateTimeFormat.longDateTime();
+		return formatter.print((long)ts.getTime() * 1000);
+	}
+	
 	/**
 	 ********************************************
 	 * apply exclude field filter.

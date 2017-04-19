@@ -94,7 +94,8 @@ public class OplogExtractor extends AsyncProcess<SyncOperation> {
 							.sort(new Document("$natural", -1))
 							.limit(1);
 					if (results.first() == null) {
-						throw new IllegalStateException("[" + syncName + "] oplog outdated.[" + timestamp + "]");
+						throw new IllegalStateException("[" + syncName + "] oplog outdated.["
+										+ DocumentUtils.toDateStr(timestamp) + "(" +  timestamp + ")]");
 					}
 					//logger.trace("[{}] start oplog timestamp = [{}]", config.getSyncName(), timestamp);
 					config.addSyncCount(-1);	// 同期開始時に最終同期データを再度同期するため１減算しておく
@@ -110,7 +111,8 @@ public class OplogExtractor extends AsyncProcess<SyncOperation> {
 					}
 				}
 
-				logger.info("[{}] start oplog sync. [oplog timestamp:{}]", syncName, timestamp);
+				logger.info("[{}] start oplog sync. [oplog {}({})]", syncName, 
+										DocumentUtils.toDateStr(timestamp), timestamp);
 
 				// oplogを継続的に取得
 				targetDb = client.getDatabase(config.getMongoDbName());
