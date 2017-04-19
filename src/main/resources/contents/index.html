@@ -160,7 +160,7 @@ app.controller('MongoSyncCtrl', function ($log, $scope, $resource, $http, $inter
 				templateUrl: 'resyncDlg.html',
 				controller: 'resyncDlgCtrl',
 				scope : $scope,
-				size : "md", // sm,md,lg
+				size : "sm", // sm,md,lg
 				resolve: {
 					params: function () {
 						return { syncName : syncName };
@@ -312,7 +312,6 @@ app.controller('MongoSyncCtrl', function ($log, $scope, $resource, $http, $inter
 		$scope.list();
 		$scope.getLog();
 		$scope.isLoading = false;
-		//$scope.lastUpdate = new Date();
 	}
 
 	$scope.setReload = function(interval) {
