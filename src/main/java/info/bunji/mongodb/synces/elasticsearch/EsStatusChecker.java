@@ -31,6 +31,7 @@ import java.util.concurrent.TimeUnit;
 
 import org.bson.BsonTimestamp;
 import org.elasticsearch.action.WriteConsistencyLevel;
+import org.elasticsearch.action.admin.indices.create.CreateIndexRequest;
 import org.elasticsearch.action.bulk.BulkAction;
 import org.elasticsearch.action.bulk.BulkRequest;
 import org.elasticsearch.action.delete.DeleteRequest;
@@ -94,6 +95,7 @@ public class EsStatusChecker extends StatusChecker<Boolean> {
 	 * @throws IOException
 	 **********************************
 	 */
+	@SuppressWarnings("unchecked")
 	public EsStatusChecker(long interval, int syncQueueLimit) throws IOException {
 		super(interval, syncQueueLimit);
 		
@@ -139,10 +141,11 @@ public class EsStatusChecker extends StatusChecker<Boolean> {
 				.put("transport.client.sniff", true);
 
 		// es connection with shield auth.
-		Class<?> pluginClazz = null;
+		Class<Plugin> pluginClazz = null;
 		if (prop.containsKey("es.auth")) {
 			try {
-				pluginClazz = Class.forName("org.elasticsearch.shield.ShieldPlugin");
+				//pluginClazz = (Class<Plugin>) Class.forName("org.elasticsearch.shield.ShieldPlugin");
+				pluginClazz = classForName("org.elasticsearch.shield.ShieldPlugin");
 				logger.info("elasticsearch connection with authentication.");
 				settings.put("shield.user", prop.getProperty("es.auth"));
 			} catch (ClassNotFoundException cnfe) {
@@ -153,12 +156,17 @@ public class EsStatusChecker extends StatusChecker<Boolean> {
 		TransportClient.Builder builder = TransportClient.builder().settings(settings.build());
 		if (pluginClazz != null) {
 			// auth for shield plugin
-			builder.addPlugin((Class<Plugin>) pluginClazz);
+			builder.addPlugin(pluginClazz);
 		}
 		builder.addPlugin(DeleteByQueryPlugin.class);
 
 		esClient = builder.build()
 				.addTransportAddresses(addresses.toArray(new InetSocketTransportAddress[0]));
+	}
+
+	@SuppressWarnings("unchecked")
+	private <T> Class<T> classForName(String className) throws ClassNotFoundException {
+		 return (Class<T>) Class.forName(className);
 	}
 
 	/*
@@ -223,6 +231,7 @@ public class EsStatusChecker extends StatusChecker<Boolean> {
 	
 		} catch (IndexNotFoundException infe) {
 			// TODO create config index.
+			esClient.admin().indices().create(new CreateIndexRequest(CONFIG_INDEX)).actionGet();
 		} catch (NoNodeAvailableException nnae) {
 			// retry connect.
 			retry++;

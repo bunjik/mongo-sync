@@ -20,6 +20,7 @@ import org.elasticsearch.client.Client;
 import org.elasticsearch.common.unit.ByteSizeUnit;
 import org.elasticsearch.common.unit.ByteSizeValue;
 import org.elasticsearch.common.unit.TimeValue;
+import org.elasticsearch.indices.IndexClosedException;
 
 import info.bunji.asyncutil.AsyncExecutor;
 import info.bunji.asyncutil.AsyncResult;
@@ -143,7 +144,7 @@ public class EsSyncProcess extends SyncProcess implements BulkProcessor.Listener
 	public void doDelete(SyncOperation op) {
 		//同期対象チェック
 		if (getConfig().isTargetCollection(op.getCollection())) {
-			getConfig().addSyncCount();
+			getConfig().addSyncCount(-1);
 			getBulkProcessor().add(makeDeleteRequest(op));
 		}
 	}
@@ -244,7 +245,7 @@ public class EsSyncProcess extends SyncProcess implements BulkProcessor.Listener
 				other++;
 			}
 		}
-		
+
 		logger.error(String.format("[%s] bulk failure. size=[%d] op=[update={}/delete={}/other={}] : %s", 
 									getConfig().getSyncName(),
 									request.requests().size(),
@@ -257,8 +258,13 @@ public class EsSyncProcess extends SyncProcess implements BulkProcessor.Listener
 //			// TODO if bulk process fatal error, stop sync or retry?
 //		}
 
-		try {
-			// try update sratus
+		// if target index closed, stop sync(not update status)
+		if (failure instanceof IndexClosedException) {
+			throw new ElasticsearchException(failure.getMessage(), failure);
+		}
+
+ 		try {
+			// try sratus update
 			esClient.update(EsUtils.makeStatusRequest(getConfig(), Status.STOPPED, null)).actionGet();
 			EsUtils.refreshIndex(esClient, EsStatusChecker.CONFIG_INDEX);
 		} catch (Throwable t) {
