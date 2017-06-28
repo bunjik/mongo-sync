@@ -1,5 +1,5 @@
 /**
- * 
+ *
  */
 package info.bunji.mongodb.synces.elasticsearch;
 
@@ -61,7 +61,7 @@ public class EsSyncProcess extends SyncProcess implements BulkProcessor.Listener
 		super(config, operations);
 		this.esClient = esClient;
 		this.indexName = config.getDestDbName();
-		
+
 		Properties prop = MongoEsSync.getSettingProperties();
 		DEFAULT_BUlK_ACTIONS = Integer.valueOf(prop.getProperty("es.bulk.actions"));
 		DEFAULT_BUlK_INTERVAL = Long.valueOf(prop.getProperty("es.bulk.interval"));
@@ -144,7 +144,7 @@ public class EsSyncProcess extends SyncProcess implements BulkProcessor.Listener
 	public void doDelete(SyncOperation op) {
 		//同期対象チェック
 		if (getConfig().isTargetCollection(op.getCollection())) {
-			getConfig().addSyncCount(-1);
+			getConfig().addSyncCount();
 			getBulkProcessor().add(makeDeleteRequest(op));
 		}
 	}
@@ -161,7 +161,7 @@ public class EsSyncProcess extends SyncProcess implements BulkProcessor.Listener
 		// 削除処理はoplogとの不整合を防ぐため、同期で実行する
 		String syncName = getConfig().getSyncName();
 		logger.info(op.getOp() + " index:" + indexName + " type:" + op.getCollection());
-		AsyncExecutor.execute(new EsTypeDeleteProcess(esClient, indexName, op.getCollection())).block();
+		AsyncExecutor.execute(new EsTypeDeleteProcess(esClient, getConfig(), op.getCollection())).block();
 		logger.debug("[{}] type deleted.[{}]", syncName, op.getCollection());
 
 		// TODO ステータス更新用のリクエストを追加する
@@ -246,7 +246,7 @@ public class EsSyncProcess extends SyncProcess implements BulkProcessor.Listener
 			}
 		}
 
-		logger.error(String.format("[%s] bulk failure. size=[%d] op=[update={}/delete={}/other={}] : %s", 
+		logger.error(String.format("[%s] bulk failure. size=[%d] op=[update={}/delete={}/other={}] : %s",
 									getConfig().getSyncName(),
 									request.requests().size(),
 									update, delete, other,

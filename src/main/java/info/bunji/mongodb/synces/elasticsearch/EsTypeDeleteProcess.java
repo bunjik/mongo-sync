@@ -17,6 +17,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import info.bunji.asyncutil.AsyncProcess;
+import info.bunji.mongodb.synces.SyncConfig;
 
 /**
  ************************************************
@@ -30,12 +31,14 @@ public class EsTypeDeleteProcess extends AsyncProcess<Boolean> {
 	private Logger logger = LoggerFactory.getLogger(getClass());
 
 	private Client esClient;
+	private SyncConfig config;
 	private String index;
 	private String type;
 
-	public EsTypeDeleteProcess(Client esClient, String index, String type) {
+	public EsTypeDeleteProcess(Client esClient, SyncConfig config, String type) {
 		this.esClient = esClient;
-		this.index = index;
+		this.config = config;
+		this.index = config.getDestDbName();
 		this.type = type;
 	}
 
@@ -69,11 +72,11 @@ public class EsTypeDeleteProcess extends AsyncProcess<Boolean> {
 							logger.debug("deleting " + index + "/" + type + "(" + delcount + ")");
 						}
 						bulkRequest.add(esClient.prepareDelete(index, type, hit.getId()));
+						config.addSyncCount(-1);
 					}
 					scrollRes = esClient.prepareSearchScroll(scrollRes.getScrollId())
 									.setScroll(new TimeValue(6000000))
 									.execute().actionGet();
-
 					// Break condition: No hits are returned
 					if (scrollRes.getHits().getHits().length == 0) {
 						break;

@@ -16,6 +16,8 @@
 package info.bunji.mongodb.synces;
 
 import java.net.UnknownHostException;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Set;
 
 import org.bson.BsonTimestamp;
@@ -49,6 +51,7 @@ public class OplogExtractor extends AsyncProcess<SyncOperation> {
 	private SyncConfig config;
 	private BsonTimestamp timestamp;
 	private MongoDatabase targetDb = null;
+	private final Map<String,MongoCollection<Document>> cachedCollection = new HashMap<>();
 
 	public static final int MAX_RETRY = 20;
 
@@ -111,7 +114,7 @@ public class OplogExtractor extends AsyncProcess<SyncOperation> {
 					}
 				}
 
-				logger.info("[{}] start oplog sync. [oplog {}({})]", syncName, 
+				logger.info("[{}] start oplog sync. [oplog {}({})]", syncName,
 										DocumentUtils.toDateStr(timestamp), timestamp);
 
 				// oplogを継続的に取得
@@ -144,7 +147,7 @@ public class OplogExtractor extends AsyncProcess<SyncOperation> {
 					} else if (operation == Operation.UPDATE) {
 						// update時は差分データとなるのでidでドキュメントを取得する
 						String namespace = getCollectionName(doc);
-						MongoCollection<Document> extractCollection = targetDb.getCollection(namespace);
+						MongoCollection<Document> extractCollection = getMongoCollection(namespace);
 						Document updateDoc = extractCollection.find(doc.get("o2", Document.class)).first();
 						if (null != updateDoc) {
 							Document filteredDoc = DocumentUtils.applyFieldFilter(updateDoc, includeFields, excludeFields);
@@ -179,6 +182,15 @@ public class OplogExtractor extends AsyncProcess<SyncOperation> {
 				throw t;
 			}
 		}
+	}
+
+	private MongoCollection<Document> getMongoCollection(String namespace) {
+		MongoCollection<Document> collection = cachedCollection.get(namespace);
+		if (collection == null) {
+			collection = targetDb.getCollection(namespace);
+			cachedCollection.put(namespace, collection);
+		}
+		return collection;
 	}
 
 	/**

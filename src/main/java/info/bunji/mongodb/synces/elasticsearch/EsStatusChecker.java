@@ -43,7 +43,6 @@ import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.transport.InetSocketTransportAddress;
 import org.elasticsearch.common.transport.TransportAddress;
 import org.elasticsearch.index.IndexNotFoundException;
-import org.elasticsearch.plugin.deletebyquery.DeleteByQueryPlugin;
 import org.elasticsearch.plugins.Plugin;
 import org.elasticsearch.search.SearchHit;
 import org.elasticsearch.search.sort.SortBuilders;
@@ -64,7 +63,7 @@ import info.bunji.mongodb.synces.SyncStatus;
 /**
  ************************************************
  * sync status checker for elasticsearch.
- * 
+ *
  * @author Fumiharu Kinoshita
  ************************************************
  */
@@ -98,7 +97,7 @@ public class EsStatusChecker extends StatusChecker<Boolean> {
 	@SuppressWarnings("unchecked")
 	public EsStatusChecker(long interval, int syncQueueLimit) throws IOException {
 		super(interval, syncQueueLimit);
-		
+
 		// load setting.
 		//Properties prop = loadProperties(MongoEsSync.PROPERTY_NAME);
 		Properties prop = MongoEsSync.getSettingProperties();
@@ -121,7 +120,7 @@ public class EsStatusChecker extends StatusChecker<Boolean> {
 		}
 
 		// TODO コネクション生成は別メソッド化する？
-		
+
 		Set<TransportAddress> addresses = new HashSet<>();
 		for (String host : prop.getProperty("es.hosts").split(",")) {
 			String[] addr = host.split(":");
@@ -158,7 +157,6 @@ public class EsStatusChecker extends StatusChecker<Boolean> {
 			// auth for shield plugin
 			builder.addPlugin(pluginClazz);
 		}
-		builder.addPlugin(DeleteByQueryPlugin.class);
 
 		esClient = builder.build()
 				.addTransportAddresses(addresses.toArray(new InetSocketTransportAddress[0]));
@@ -228,7 +226,7 @@ public class EsStatusChecker extends StatusChecker<Boolean> {
 
 			// reset retry count.
 			retry = 0;
-	
+
 		} catch (IndexNotFoundException infe) {
 			// TODO create config index.
 			esClient.admin().indices().create(new CreateIndexRequest(CONFIG_INDEX)).actionGet();
@@ -360,13 +358,13 @@ public class EsStatusChecker extends StatusChecker<Boolean> {
 							}
 							logger.debug("[{]] waiting resync.", syncName);
 						}
-					} catch (InterruptedException e) {}					
+					} catch (InterruptedException e) {}
 				}
 			}
 		}
 		return ret;
 	}
-	
+
 	/*
 	 **********************************
 	 * (non Javadoc)

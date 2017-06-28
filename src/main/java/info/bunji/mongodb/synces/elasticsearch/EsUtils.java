@@ -30,6 +30,7 @@ import org.elasticsearch.action.admin.indices.exists.indices.IndicesExistsReques
 import org.elasticsearch.action.admin.indices.mapping.get.GetMappingsResponse;
 import org.elasticsearch.action.admin.indices.refresh.RefreshRequest;
 import org.elasticsearch.action.index.IndexRequest;
+import org.elasticsearch.action.support.IndicesOptions;
 import org.elasticsearch.action.update.UpdateRequest;
 import org.elasticsearch.client.Client;
 import org.elasticsearch.cluster.metadata.AliasMetaData;
@@ -135,10 +136,13 @@ public class EsUtils {
 	 ********************************************
 	 */
 	public static Map<String, Collection<String>> getIndexAliases(Client esClient, List<String> indexNames) {
+		IndicesOptions indicesOptions = IndicesOptions.fromOptions(true, true, false, false);
 		Iterator<ObjectObjectCursor<String, List<AliasMetaData>>> it =
 				esClient.admin()
 						.indices()
-						.getAliases(new GetAliasesRequest().indices(indexNames.toArray(new String[indexNames.size()])))
+						.getAliases(new GetAliasesRequest()
+										.indices(indexNames.toArray(new String[indexNames.size()]))
+										.indicesOptions(indicesOptions))
 						.actionGet()
 						.getAliases()
 						.iterator();
@@ -261,7 +265,7 @@ public class EsUtils {
 	 * @param status sync status
 	 * @param indexCnt indexed count
 	 * @param ts mongo oplog timmestamp
-	 * @return json 
+	 * @return json
 	 ********************************************
 	 */
 	public static String makeStatusJson(Status status, Long indexCnt, BsonTimestamp ts) {

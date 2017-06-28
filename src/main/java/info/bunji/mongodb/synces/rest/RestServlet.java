@@ -31,7 +31,7 @@ import info.bunji.mongodb.synces.StatusChecker;
 
 /**
  ************************************************
- * 
+ *
  * @author Fumiharu Kinoshita
  ************************************************
  */
@@ -58,7 +58,7 @@ public class RestServlet extends AbstractRestServlet {
 				results.put("results", process.getConfigs(true));
 				toJsonStream(res, results);
 			} else if (params[1].equals("config") && params.length >= 3) {
-				toJsonStream(res, process.getConfigs().get(params[2]));
+				toJsonStream(res, process.getConfigs(true).get(params[2]));
 //			} else if (params[1].equals("mapping") && params.length >= 3) {
 //				Map<String, Object> results = new TreeMap<>();
 //				results.put("results", process.getMapping(params[2]));

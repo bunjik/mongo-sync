@@ -144,7 +144,7 @@ app.controller('MongoSyncCtrl', function ($log, $scope, $resource, $http, $inter
 				templateUrl: 'deleteDlg.html',
 				controller: 'deleteDlgCtrl',
 				scope : $scope,
-				size : "sm", // sm,md,lg
+				size : "md", // sm,md,lg
 				resolve: {
 					params: function () {
 						return { syncName : syncName };
@@ -160,7 +160,7 @@ app.controller('MongoSyncCtrl', function ($log, $scope, $resource, $http, $inter
 				templateUrl: 'resyncDlg.html',
 				controller: 'resyncDlgCtrl',
 				scope : $scope,
-				size : "sm", // sm,md,lg
+				size : "md", // sm,md,lg
 				resolve: {
 					params: function () {
 						return { syncName : syncName };
@@ -368,7 +368,7 @@ app.controller('MongoSyncCtrl', function ($log, $scope, $resource, $http, $inter
 									<th class="text-center">Index</th>
 									<th class="text-center" style="width:10em">Status</th>
 									<th class="text-center" style="width:11em">Last Sync</th>
-									<th class="text-center col-md-1" data-toggle="tooltip" title="indexed last started">Indexed</th>
+									<th class="text-center col-md-1" data-toggle="tooltip" title="indexed last started">Sync docs</th>
 									<th class="text-center col-md-2">Action</th>
 									<th class="text-center col-md-1"></th>
 								</tr>
