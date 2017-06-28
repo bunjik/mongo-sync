@@ -14,7 +14,7 @@
 		<maven.compiler.source>1.7</maven.compiler.source>
 		<maven.compiler.target>1.7</maven.compiler.target>
 		<elasticsearch.version>2.4.3</elasticsearch.version>
-		<mongo-java-driver.version>3.2.2</mongo-java-driver.version>
+		<mongo-java-driver.version>3.4.2</mongo-java-driver.version>
 		<jetty.version>8.2.0.v20160908</jetty.version>
 		<maven.test.skip>false</maven.test.skip>
 		<dryRun>true</dryRun>
@@ -83,11 +83,7 @@
 			<groupId>org.elasticsearch.plugin</groupId>
 			<artifactId>shield</artifactId>
 			<version>${elasticsearch.version}</version>
-		</dependency>
-		<dependency>
-			<groupId>org.elasticsearch.plugin</groupId>
-			<artifactId>delete-by-query</artifactId>
-			<version>${elasticsearch.version}</version>
+			<optional>true</optional>
 		</dependency>
 		<dependency>
 			<groupId>info.bunji</groupId>
