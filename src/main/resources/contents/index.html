@@ -420,7 +420,10 @@ app.controller('MongoSyncCtrl', function ($log, $scope, $resource, $http, $inter
 												<li role="menuitem"><a href="#" x-ng-click="showConfig(syncName)">show setting</a></li>
 												<li role="menuitem"><a href="#" x-ng-click="mapping(config.indexName)">show mapping</a></li>
 												<li class="divider"></li>
-												<li role="menuitem" x-ng-class="{disabled : config.status != 'STOPPED' }"><a href="#" x-ng-click="confirmResync(syncName)">resync</a></li>
+												<li role="menuitem" x-ng-class="{disabled : config.status != 'STOPPED' }">
+													<a href="#" x-ng-if="config.status == 'STOPPED'" x-ng-click="confirmResync(syncName)">resync</a>
+													<a x-ng-if="config.status != 'STOPPED'">resync</a>
+												</li>
 											</ul>
 										</div>
 									</td>

@@ -131,6 +131,9 @@ public class EsSyncProcess extends SyncProcess implements BulkProcessor.Listener
 	 */
 	@Override
 	public void doUpdate(SyncOperation op) {
+		if (op.getDestDbName() != null) {
+			getBulkProcessor().add(makeDeleteRequest(op));
+		}
 		doInsert(op);
 	}
 

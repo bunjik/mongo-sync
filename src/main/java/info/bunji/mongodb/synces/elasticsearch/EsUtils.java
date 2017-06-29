@@ -29,7 +29,6 @@ import org.elasticsearch.action.admin.indices.alias.get.GetAliasesRequest;
 import org.elasticsearch.action.admin.indices.exists.indices.IndicesExistsRequest;
 import org.elasticsearch.action.admin.indices.mapping.get.GetMappingsResponse;
 import org.elasticsearch.action.admin.indices.refresh.RefreshRequest;
-import org.elasticsearch.action.index.IndexRequest;
 import org.elasticsearch.action.support.IndicesOptions;
 import org.elasticsearch.action.update.UpdateRequest;
 import org.elasticsearch.client.Client;
@@ -229,14 +228,9 @@ public class EsUtils {
 	 ********************************************
 	 */
 	public static UpdateRequest makeIndexRequest(String index, String type, String id, String json) {
-		IndexRequest insert = new IndexRequest(index)
-								.type(type)
-								.id(id)
-								.source(json);
-		UpdateRequest update = new UpdateRequest(insert.index(), insert.type(), insert.id())
-								.doc(json)
-								.upsert(insert);
-		return update;
+		return new UpdateRequest(index, type, id)
+						.doc(json)
+						.docAsUpsert(true);
 	}
 
 	/**
@@ -250,13 +244,9 @@ public class EsUtils {
 	 */
 	public static UpdateRequest makeStatusRequest(SyncConfig config, Status status, BsonTimestamp ts) {
 		XContentBuilder content = makeStatusContent(status, config.getSyncCount(), ts);
-		IndexRequest insert = new IndexRequest(config.getConfigDbName())
-				.type("status")
-				.id(config.getSyncName())
-				.source(content);
-		return new UpdateRequest(insert.index(), insert.type(), insert.id())
-				.doc(content)
-				.upsert(insert);
+		return new UpdateRequest(config.getConfigDbName(), "status", config.getSyncName())
+						.doc(content)
+						.docAsUpsert(true);
 	}
 
 	/**
