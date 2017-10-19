@@ -69,7 +69,9 @@ public class OplogExtractor extends AsyncProcess<SyncOperation> {
 	}
 
 	/*
+	 ********************************************
 	 * {@inheridDoc}
+	 ********************************************
 	 */
 	@Override
 	protected void execute() throws Exception {
@@ -114,7 +116,7 @@ public class OplogExtractor extends AsyncProcess<SyncOperation> {
 					}
 				}
 
-				logger.info("[{}] start oplog sync. [oplog {}({})]", syncName,
+				logger.info("[{}] started oplog sync. [oplog {} ({})]", syncName,
 										DocumentUtils.toDateStr(timestamp), timestamp);
 
 				// oplogを継続的に取得
@@ -126,41 +128,42 @@ public class OplogExtractor extends AsyncProcess<SyncOperation> {
 								.cursorType(CursorType.TailableAwait)
 								.noCursorTimeout(true)
 								.oplogReplay(true);
-
+				
 				// get document from oplog
-				for (Document doc : results) {
+				for (Document oplog : results) {
+					
+					SyncOperation op = new SyncOperation(oplog, index);
 
-					// check sync collection
-					String collection = getCollectionName(doc);
-					if (!config.isTargetCollection(collection)) {
+					timestamp = op.getTimestamp();
+
+					// check target database and collection
+					if(!config.getMongoDbName().equals(op.getSrcDbName()) || !config.isTargetCollection(op.getCollection())) {
 						continue;
 					}
 
-					Operation operation = Operation.valueOf(doc.get("op"));
-
-					timestamp = doc.get("ts", BsonTimestamp.class);
-					if (operation == Operation.INSERT) {
-						Document filteredDoc = DocumentUtils.applyFieldFilter(doc.get("o", Document.class), includeFields, excludeFields);
-						append(new SyncOperation(operation, index, collection, filteredDoc, timestamp));
-					} else if (operation == Operation.DELETE) {
-						append(new SyncOperation(operation, index, collection, doc.get("o", Document.class), timestamp));
-					} else if (operation == Operation.UPDATE) {
-						// update時は差分データとなるのでidでドキュメントを取得する
-						String namespace = getCollectionName(doc);
-						MongoCollection<Document> extractCollection = getMongoCollection(namespace);
-						Document updateDoc = extractCollection.find(doc.get("o2", Document.class)).first();
-						if (null != updateDoc) {
-							Document filteredDoc = DocumentUtils.applyFieldFilter(updateDoc, includeFields, excludeFields);
-							append(new SyncOperation(operation, index, namespace, filteredDoc, timestamp));
+					// get full document
+					if (op.isPartialUpdate()) {
+						MongoCollection<Document> collection = getMongoCollection(op.getCollection());
+						Document updateDoc = collection.find(oplog.get("o2", Document.class)).first();
+						if (updateDoc == null) {
+							// skip update 
+							continue;
 						}
-					} else if (operation == Operation.DROP_COLLECTION) {
-						// type(コレクション)のデータを全件削除
-						//logger.debug("drop collection [" + collection + "]");
-						append(new SyncOperation(Operation.DROP_COLLECTION, index, collection, null, null));
-					} else {
-						// 未対応の処理
-						logger.debug("unsupported Operation [{}]", operation);
+						op.setDoc(updateDoc);
 					}
+
+					// filter document(insert or update)
+					if (op.getDoc() != null) {
+						Document filteredDoc = DocumentUtils.applyFieldFilter(op.getDoc(), includeFields, excludeFields);
+						if (filteredDoc.isEmpty()) {
+							// no change sync fields
+							continue;
+						}
+						op.setDoc(filteredDoc);
+					}
+
+					// emit sync data
+					append(op);
 				}
 			} catch (MongoClientException mce) {
 				// do nothing.
@@ -184,38 +187,18 @@ public class OplogExtractor extends AsyncProcess<SyncOperation> {
 		}
 	}
 
+	/**
+	 ********************************************
+	 * 
+	 * @param namespace
+	 * @return
+	 ********************************************
+	 */
 	private MongoCollection<Document> getMongoCollection(String namespace) {
 		MongoCollection<Document> collection = cachedCollection.get(namespace);
 		if (collection == null) {
 			collection = targetDb.getCollection(namespace);
 			cachedCollection.put(namespace, collection);
-		}
-		return collection;
-	}
-
-	/**
-	 **********************************
-	 * get collection name from oplog.
-	 * @param oplogDoc
-	 * @return
-	 **********************************
-	 */
-	private String getCollectionName(Document oplogDoc) {
-		// 対象のDB名以降の文字列が対象
-		// 暫定で最初のピリオド以降
-		String namespace = oplogDoc.getString("ns");
-		if (!namespace.startsWith(config.getMongoDbName()+".")) {
-			return null;
-		}
-		String collection = namespace.substring(namespace.indexOf(".") + 1);
-		if (collection.equals("$cmd")) {
-			Document op = oplogDoc.get("o", Document.class);
-			collection = op.getString("drop");
-
-			if (collection != null) {
-				// TODO 別の箇所でやるべき?
-				oplogDoc.put("op", Operation.DROP_COLLECTION.getValue());
-			}
 		}
 		return collection;
 	}

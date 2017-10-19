@@ -41,12 +41,7 @@ public class SyncConfig {
 
 	public static final String ID_FIELD = "_id";
 
-//	public static final String STATUS_INDEX = ".mongosync";
-
 	private String configDbName;
-
-	/** sync name */
-	private String syncName;
 
 	/** target mongo database name */
 	private String mongoDbName;
@@ -69,14 +64,17 @@ public class SyncConfig {
 	/**  */
 	private BsonTimestamp lastOpTime = null;
 
-	/** sync count */
-	private AtomicLong syncCount = new AtomicLong(0);
-
 	/** sync status */
 	private Status status;
 
 	/** extend information */
 	private Map<String, Object> extendInfo = new HashMap<>();
+
+	/** sync name */
+	private transient String syncName;
+
+	/** sync count */
+	private AtomicLong syncCount = new AtomicLong(0);
 
 	/**
 	 * 

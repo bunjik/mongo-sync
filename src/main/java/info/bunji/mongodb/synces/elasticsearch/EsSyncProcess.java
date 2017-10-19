@@ -15,6 +15,7 @@ import org.elasticsearch.action.bulk.BulkProcessor;
 import org.elasticsearch.action.bulk.BulkRequest;
 import org.elasticsearch.action.bulk.BulkResponse;
 import org.elasticsearch.action.delete.DeleteRequest;
+import org.elasticsearch.action.index.IndexRequest;
 import org.elasticsearch.action.update.UpdateRequest;
 import org.elasticsearch.client.Client;
 import org.elasticsearch.common.unit.ByteSizeUnit;
@@ -30,6 +31,7 @@ import info.bunji.mongodb.synces.StatusChecker;
 import info.bunji.mongodb.synces.SyncConfig;
 import info.bunji.mongodb.synces.SyncOperation;
 import info.bunji.mongodb.synces.SyncProcess;
+import info.bunji.mongodb.synces.util.DocumentUtils;
 
 /**
  ************************************************
@@ -37,7 +39,7 @@ import info.bunji.mongodb.synces.SyncProcess;
  * @author Fumiharu Kinoshita
  ************************************************
  */
-public class EsSyncProcess extends SyncProcess implements BulkProcessor.Listener {
+public class EsSyncProcess extends SyncProcess implements BulkProcessor. Listener {
 
 	private final Client esClient;
 	private final String indexName;
@@ -131,9 +133,6 @@ public class EsSyncProcess extends SyncProcess implements BulkProcessor.Listener
 	 */
 	@Override
 	public void doUpdate(SyncOperation op) {
-		if (op.getDestDbName() != null) {
-			getBulkProcessor().add(makeDeleteRequest(op));
-		}
 		doInsert(op);
 	}
 
@@ -146,10 +145,10 @@ public class EsSyncProcess extends SyncProcess implements BulkProcessor.Listener
 	@Override
 	public void doDelete(SyncOperation op) {
 		//同期対象チェック
-		if (getConfig().isTargetCollection(op.getCollection())) {
+//		if (getConfig().isTargetCollection(op.getCollection())) {
 			getConfig().addSyncCount();
 			getBulkProcessor().add(makeDeleteRequest(op));
-		}
+//		}
 	}
 
 	/*
@@ -178,8 +177,9 @@ public class EsSyncProcess extends SyncProcess implements BulkProcessor.Listener
 	 * @return
 	 ********************************************
 	 */
-	private UpdateRequest makeIndexRequest(SyncOperation op) {
-		return EsUtils.makeIndexRequest(op.getDestDbName(), op.getCollection(), op.getId(), op.getJson());
+	private IndexRequest makeIndexRequest(SyncOperation op) {
+		return new IndexRequest(op.getDestDbName(), op.getCollection(), op.getId()).source(op.getJson());
+//		return EsUtils.makeIndexRequest(op.getDestDbName(), op.getCollection(), op.getId(), op.getJson());
 	}
 
 	/**
@@ -197,7 +197,7 @@ public class EsSyncProcess extends SyncProcess implements BulkProcessor.Listener
 
 	/**
 	 ********************************************
-	 * elasticsearchへのバルク処理を行うProcessorのインスタンスを取得する.
+	 * get elasticsearch bulk processor.
 	 * <br>
 	 * 取得したProcessorに対して更新データを追加していくだけで、追加されたデータが
 	 * いずれかの条件（経過時間、格納件数、合計サイズ）を満たすと自動的にバルク処理が実行される。
@@ -240,7 +240,7 @@ public class EsSyncProcess extends SyncProcess implements BulkProcessor.Listener
 		int delete = 0;
 		int other  = 0;
 		for (ActionRequest<?> req : request.requests()) {
-			if (req instanceof UpdateRequest) {
+			if (req instanceof IndexRequest || req instanceof UpdateRequest) {
 				update++;
 			} else if (req instanceof DeleteRequest) {
 				delete++;
@@ -249,9 +249,10 @@ public class EsSyncProcess extends SyncProcess implements BulkProcessor.Listener
 			}
 		}
 
-		logger.error(String.format("[%s] bulk failure. size=[%d] op=[update={}/delete={}/other={}] : %s",
+		logger.error(String.format("[%s] bulk failure. size=[%d] oplog=[%s] op=[upsert={}/delete={}/other={}] : %s",
 									getConfig().getSyncName(),
 									request.requests().size(),
+									DocumentUtils.toDateStr(requestOplogTs.get(executionId)),
 									update, delete, other,
 									failure.getMessage()
 								), failure);
@@ -290,6 +291,7 @@ public class EsSyncProcess extends SyncProcess implements BulkProcessor.Listener
 			for (BulkItemResponse item : response) {
 				String opType = item.getOpType();
 				switch(opType) {
+				case "index" :
 				case "update" :
 					update++; break;
 				case "delete" :
@@ -298,9 +300,10 @@ public class EsSyncProcess extends SyncProcess implements BulkProcessor.Listener
 					other++; break;
 				}
 			}
-			logger.trace(String.format("[%s] bulk size=[%4d] op=[update=%d/delete=%d/other=%d](%d ms)",
+			logger.trace(String.format("[%s] bulk size=[%4d] oplog=[%s] op=[upsert=%d/delete=%d/other=%d](%4dms)",
 								getConfig().getSyncName(),
 								response.getItems().length,
+								DocumentUtils.toDateStr(requestOplogTs.get(executionId)),
 								update, delete, other,
 								response.getTookInMillis()));
 		}

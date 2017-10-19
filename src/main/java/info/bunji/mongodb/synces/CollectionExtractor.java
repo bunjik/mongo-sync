@@ -63,7 +63,9 @@ public class CollectionExtractor extends AsyncProcess<SyncOperation> {
 	}
 
 	/*
+	 ********************************************
 	 * {@inheridDoc}
+	 ********************************************
 	 */
 	@Override
 	protected void execute() throws Exception {

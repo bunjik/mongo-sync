@@ -62,13 +62,6 @@ public class EsUtils {
 		// do nothing.
 	}
 
-//	public static void createSystemIndex(Client esClient, String indexName) {
-//		if (!isExistsIndex(esClient, indexName)) {
-//			CreateIndexRequest req = new CreateIndexRequest(indexName);
-////			req.mapping(type, source)
-//		}
-//	}
-
 	/**
 	 ********************************************
 	 * check index exists.
@@ -217,21 +210,19 @@ public class EsUtils {
 		return true;
 	}
 
-	/**
-	 ********************************************
-	 * create document insert/updete request.
-	 * @param index index name
-	 * @param type  index type
-	 * @param id    document id
-	 * @param json  document data
-	 * @return insert/updete request
-	 ********************************************
-	 */
-	public static UpdateRequest makeIndexRequest(String index, String type, String id, String json) {
-		return new UpdateRequest(index, type, id)
-						.doc(json)
-						.docAsUpsert(true);
-	}
+//	/**
+//	 ********************************************
+//	 * create document insert/updete request.
+//	 * @param index index name
+//	 * @param type  index type
+//	 * @param id    document id
+//	 * @param json  document data
+//	 * @return insert/updete request
+//	 ********************************************
+//	 */
+//	public static IndexRequest makeIndexRequest(String index, String type, String id, String json) {
+//		return new IndexRequest(index, type, id).source(json);
+//	}
 
 	/**
 	 ********************************************
@@ -271,7 +262,7 @@ public class EsUtils {
 
 	/**
 	 ********************************************
-	 *
+	 * create sync status request.
 	 * @param status
 	 * @param indexCnt
 	 * @param ts

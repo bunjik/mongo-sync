@@ -18,10 +18,14 @@ package info.bunji.mongodb.synces;
 import java.lang.reflect.Type;
 import java.util.Date;
 
+import org.apache.commons.lang3.builder.ToStringBuilder;
+import org.apache.commons.lang3.builder.ToStringStyle;
 import org.bson.BsonTimestamp;
 import org.bson.Document;
 import org.bson.types.ObjectId;
 import org.joda.time.DateTime;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
@@ -38,13 +42,17 @@ import com.google.gson.JsonSerializer;
  */
 public class SyncOperation {
 
+	private static final Logger logger = LoggerFactory.getLogger(SyncOperation.class);
+	
 	private String destDbName;
 
-	private final Operation op;
-	private final String collection;
-	private final Document  doc;
-	private final String id;
-	private final BsonTimestamp ts;
+	private Operation op;
+	private String srcDbName;
+	private String collection;
+	private Document doc = null;
+	private String id = null;
+	private BsonTimestamp ts;
+	private boolean isPartialUpdate = false;
 
 	private static final Gson gson;
 
@@ -116,6 +124,79 @@ public class SyncOperation {
 
 	/**
 	 **********************************
+	 * 
+	 * @param oplogDoc
+	 * @param destDbName
+	 **********************************
+	 */
+	public SyncOperation(Document oplogDoc, String destDbName) {
+
+		//logger.trace("oplog = \n{}", oplogDoc.toJson());
+
+		this.op = Operation.valueOf(oplogDoc.get("op"));
+		this.destDbName = destDbName;
+
+		String ns = oplogDoc.getString("ns");
+
+		String[] nsVals = ns.split("\\.", 2);
+		this.srcDbName = nsVals[0];
+		this.collection = nsVals[1];
+
+		this.ts = oplogDoc.get("ts", BsonTimestamp.class);
+
+		Document o1Doc = oplogDoc.get("o", Document.class);
+		Document o2Doc = oplogDoc.get("o2", Document.class);
+		
+		switch (op) {
+		case INSERT :
+			if (o1Doc != null && o1Doc.containsKey(SyncConfig.ID_FIELD)) {
+				this.id = o1Doc.remove(SyncConfig.ID_FIELD).toString();
+				this.doc = o1Doc;
+			}
+			break;
+		case DELETE :
+			if (o1Doc != null && o1Doc.containsKey(SyncConfig.ID_FIELD)) {
+				this.id = o1Doc.remove(SyncConfig.ID_FIELD).toString();
+			}
+			break;
+		case UPDATE :
+			if (o1Doc.containsKey("$unset") || o1Doc.containsKey("$set")) {
+				this.isPartialUpdate = true;
+			} else {
+				this.doc = o1Doc;
+			}
+			this.id = o2Doc.getObjectId("_id").toString();
+			break;
+		case COMMAND :
+			if (o1Doc.containsKey("drop")) {
+				// drop collection
+				this.op = Operation.DROP_COLLECTION;
+				this.collection = o1Doc.getString("drop");
+			} else if (o1Doc.containsKey("create")) {
+				// create collection
+				this.collection = o1Doc.getString("create");
+				this.op = Operation.CREATE_COLLECTION;
+			} else {
+				this.op = Operation.UNKNOWN;
+			}
+			break;
+		default :
+			break;
+		}
+	}
+
+	/**
+	 **********************************
+	 * 
+	 * @return 
+	 **********************************
+	 */
+	public boolean isPartialUpdate() {
+		return isPartialUpdate;
+	}
+	
+	/**
+	 **********************************
 	 * get oplog timestamp.
 	 * @return oplog timestamp
 	 **********************************
@@ -144,17 +225,25 @@ public class SyncOperation {
 		return id;
 	}
 
+	public String getSrcDbName() {
+		return srcDbName;
+	}
+	
 	/**
+	 **********************************
 	 * 
 	 * @return
+	 **********************************
 	 */
 	public String getDestDbName() {
 		return destDbName;
 	}
 
 	/**
+	 **********************************
 	 * 
 	 * @param destDbName
+	 **********************************
 	 */
 	public void setDestDbName(String destDbName) {
 		this.destDbName = destDbName;
@@ -182,11 +271,34 @@ public class SyncOperation {
 
 	/**
 	 **********************************
+	 * get document.
+	 * @return document
+	 **********************************
+	 */
+	public void setDoc(Document doc) {
+		doc.remove("_id");
+		this.doc = doc;
+	}
+
+
+	/**
+	 **********************************
 	 * get json document .
 	 * @return json converted document
 	 **********************************
 	 */
 	public String getJson() {
 		return gson.toJson(doc);
+	}
+
+	/*
+	 **********************************
+	 * (非 Javadoc)
+	 * @see java.lang.Object#toString()
+	 **********************************
+	 */
+	@Override
+	public String toString() {
+		return ToStringBuilder.reflectionToString(this, ToStringStyle.MULTI_LINE_STYLE);
 	}
 }

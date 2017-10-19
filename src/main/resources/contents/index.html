@@ -198,6 +198,7 @@ app.controller('MongoSyncCtrl', function ($log, $scope, $resource, $http, $inter
 	$scope.lastUpdate = undefined;
 	$scope.alarts = [];
 
+	$scope.status = 0;	// 0:normal 1:error
 	$scope.activeTab = 1;	// settings tab
 
 	hotkeys.add({
@@ -223,8 +224,9 @@ app.controller('MongoSyncCtrl', function ($log, $scope, $resource, $http, $inter
 	$scope.list = function() {
 		syncConfigs.list().$promise.then(function(data) {
 			$scope.configs = data.results;
+			$scope.status = 0;
 		}).catch(function(data, status) {
-
+			$scope.status = 1;
 		});
 	};
 
@@ -303,6 +305,9 @@ app.controller('MongoSyncCtrl', function ($log, $scope, $resource, $http, $inter
 		}).then(function(res) {
 			$scope.logs = res.data.results;
 			$scope.lastUpdate = Date.parse(res.headers("Date"));
+			$scope.status = 0;
+		}).catch(function(data, status) {
+			$scope.status = 1;
 		})['finally'](function() {
 			$scope.isLoading = false;
 		});

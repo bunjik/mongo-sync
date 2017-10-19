@@ -69,6 +69,9 @@ public abstract class SyncProcess extends AsyncProcess<Boolean>
 				case DROP_DATABASE:
 					doDropDatabse(op);
 					break;
+				case CREATE_COLLECTION:
+					doCreateCollection(op);
+					break;
 				default:
 					logger.warn("[{}] unsupported operation. [{}/{}]",
 											syncName, op.getCollection(), op.getOp());
@@ -129,6 +132,16 @@ public abstract class SyncProcess extends AsyncProcess<Boolean>
 	 **********************************
 	 */
 	protected void doDelete(SyncOperation op) {
+		logger.warn("unsupported operation. [{}/{}]", op.getCollection(), op.getOp());
+	}
+
+	/**
+	 **********************************
+	 * process collection create operation.
+	 * @param op sync operation
+	 **********************************
+	 */
+	protected void doCreateCollection(SyncOperation op) {
 		logger.warn("unsupported operation. [{}/{}]", op.getCollection(), op.getOp());
 	}
 

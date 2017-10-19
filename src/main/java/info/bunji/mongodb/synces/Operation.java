@@ -4,6 +4,7 @@ public enum Operation {
 	INSERT("i"),
 	UPDATE("u"),
 	DELETE("d"),
+	CREATE_COLLECTION("cc"),
 	DROP_COLLECTION("dc"),
 	DROP_DATABASE("dd"),
 	COMMAND("c"),

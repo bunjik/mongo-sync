@@ -71,9 +71,11 @@ public class DocumentUtils {
 	 ********************************************
 	 */
 	public static String toDateStr(BsonTimestamp ts) {
-		//DateTimeFormatter formatter = DateTimeFormat.mediumDateTime();
-		DateTimeFormatter formatter = DateTimeFormat.longDateTime();
-		return formatter.print((long)ts.getTime() * 1000);
+		if (ts != null) {
+			DateTimeFormatter formatter = DateTimeFormat.longDateTime();
+			return formatter.print((long)ts.getTime() * 1000);
+		}
+		return "";
 	}
 	
 	/**

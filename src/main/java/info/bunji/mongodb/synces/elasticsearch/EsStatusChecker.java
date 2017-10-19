@@ -83,7 +83,7 @@ public class EsStatusChecker extends StatusChecker<Boolean> {
 		defaultProps.put("es.hosts", "localhost:9300");
 		defaultProps.put("es.clustername", "elasticsearch");
 		defaultProps.put("es.bulk.actions", "3000");
-		defaultProps.put("es.bulk.interval", "500");
+		defaultProps.put("es.bulk.interval", "1000");
 		defaultProps.put("es.bulk.sizeMb", "64");
 	}
 
@@ -94,7 +94,6 @@ public class EsStatusChecker extends StatusChecker<Boolean> {
 	 * @throws IOException
 	 **********************************
 	 */
-	@SuppressWarnings("unchecked")
 	public EsStatusChecker(long interval, int syncQueueLimit) throws IOException {
 		super(interval, syncQueueLimit);
 
@@ -309,7 +308,7 @@ public class EsStatusChecker extends StatusChecker<Boolean> {
 			try {
 				final Map<String, Collection<String>> aliasMap = EsUtils.getIndexAliases(esClient, indexNames);
 				configMap = Maps.transformEntries(configMap, new EntryTransformer<String, SyncConfig, SyncConfig>() {
-				@Override
+					@Override
 					public SyncConfig transformEntry(String syncName, SyncConfig config) {
 						config.getExtendInfo().put("aliases", aliasMap.get(config.getDestDbName()));
 						return config;
