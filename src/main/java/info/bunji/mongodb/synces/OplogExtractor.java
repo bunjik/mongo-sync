@@ -81,6 +81,8 @@ public class OplogExtractor extends AsyncProcess<SyncOperation> {
 		String index = config.getDestDbName();
 		String syncName = config.getSyncName();
 
+int checkPoint = 0;
+
 		// oplogからの取得処理
 		int retryCnt = 0;
 		while (true) {
@@ -110,14 +112,11 @@ public class OplogExtractor extends AsyncProcess<SyncOperation> {
 						// 一致しない場合、mongoのデータが過去に戻っている可能性があるため
 						// 取得できた最新のタイムスタンプから同期を再開する
 						timestamp = tmpTs;
-						config.setLastOpTime(timestamp);
-						Document statusDoc = DocumentUtils.makeStatusDocument(Status.RUNNING, null, timestamp);
-						append(new SyncOperation(Operation.UPDATE, "status", statusDoc, config.getSyncName()));
 					}
+					config.setLastOpTime(timestamp);
+					append(DocumentUtils.makeStatusOperation(config));
+					//append(DocumentUtils.makeStatusOperation(Status.RUNNING, config, timestamp));
 				}
-
-				logger.info("[{}] started oplog sync. [oplog {} ({})]", syncName,
-										DocumentUtils.toDateStr(timestamp), timestamp);
 
 				// oplogを継続的に取得
 				targetDb = client.getDatabase(config.getMongoDbName());
@@ -128,7 +127,10 @@ public class OplogExtractor extends AsyncProcess<SyncOperation> {
 								.cursorType(CursorType.TailableAwait)
 								.noCursorTimeout(true)
 								.oplogReplay(true);
-				
+
+				logger.info("[{}] started oplog sync. [oplog {} ({})]", syncName,
+											DocumentUtils.toDateStr(timestamp), timestamp);
+
 				// get document from oplog
 				for (Document oplog : results) {
 					
@@ -136,13 +138,29 @@ public class OplogExtractor extends AsyncProcess<SyncOperation> {
 
 					timestamp = op.getTimestamp();
 
+					// TODO 更新がなくても定期的に同期時刻は更新すべきか
+					// そうしないと、長期間更新のない同期で、out of dateとなる可能性がある
+					
 					// check target database and collection
 					if(!config.getMongoDbName().equals(op.getSrcDbName()) || !config.isTargetCollection(op.getCollection())) {
+
+if (++checkPoint >= 10000) {
+	// 無更新が一定回数継続したらステータスの最終同期時刻のみ更新する
+//	EsUtils.makeStatusRequest(config, null, timestamp);
+//	Document confDoc = DocumentUtils.fromJson(json);
+//	SyncOperation cpOp = new SyncOperation(Operation.UPDATE, config.getConfigDbName(), null, config.getDestDbName());
+//	cpOp.setDoc(confDoc);
+
+	Document statusDoc = DocumentUtils.makeStatusDocument(Status.RUNNING, config.getDestDbName(), timestamp);
+
+	checkPoint = 0;		// clear check count
+	
+}
 						continue;
 					}
 
-					// get full document
 					if (op.isPartialUpdate()) {
+						// get full document
 						MongoCollection<Document> collection = getMongoCollection(op.getCollection());
 						Document updateDoc = collection.find(oplog.get("o2", Document.class)).first();
 						if (updateDoc == null) {

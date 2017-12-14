@@ -77,6 +77,8 @@ public class EsStatusChecker extends StatusChecker<Boolean> {
 
 	public static final String CONFIG_INDEX = ".mongosync";
 
+	private Gson gson = new Gson();
+
 	static {
 		// default settings
 		defaultProps = new Properties();
@@ -281,7 +283,6 @@ public class EsStatusChecker extends StatusChecker<Boolean> {
 		}
 
 		List<String> indexNames = new ArrayList<>();
-		Gson gson = new Gson();
 		Map<String, SyncConfig> configMap = new TreeMap<>();
 		for (SearchHit hit : res.getHits().getHits()) {
 			String syncName = hit.getId();
@@ -297,6 +298,7 @@ public class EsStatusChecker extends StatusChecker<Boolean> {
 				SyncStatus status = new SyncStatus(hit.sourceAsMap());
 				config.setStatus(status.getStatus());
 				config.setLastOpTime(status.getLastOpTime());
+//config.setLastOpTime(status.getLastSyncTime());
 				if (getIndexer(config.getSyncName()) != null) {
 					config.addSyncCount(getIndexer(config.getSyncName()).getConfig().getSyncCount());
 				}
@@ -348,7 +350,7 @@ public class EsStatusChecker extends StatusChecker<Boolean> {
 					// waiting resync
 					try {
 						CountDownLatch latch = new CountDownLatch(10);
-						while(latch.await(500, TimeUnit.MILLISECONDS)) {
+						while(latch.await(1000, TimeUnit.MILLISECONDS)) {
 							latch.countDown();
 							if (isRunning(syncName)) {
 								ret = true;

@@ -79,6 +79,29 @@ public abstract class StatusChecker<T> extends AsyncIntervalProcess<T>
 
 	/**
 	 **********************************
+	 * check status
+	 * @return true if continue check process, false to stop check process
+	 **********************************
+	 */
+//	protected abstract boolean doCheckStatus();
+	protected boolean doCheckStatus() {
+		try {
+			// check status
+			checkStatus();
+		} catch (Throwable t) {
+			// 
+			//doCheckError(t);
+		}
+		return true;
+	}
+
+	
+	protected void doCheckError(Throwable t) throws Exception {
+		
+	}
+
+	/**
+	 **********************************
 	 * get sync configs.
 	 * @return sync configs
 	 **********************************
@@ -139,7 +162,7 @@ public abstract class StatusChecker<T> extends AsyncIntervalProcess<T>
 				}
 			} else {
 				switch (config.getStatus()) {
-	
+
 				case RUNNING :
 					// restart sync. if indexer not running.
 					if (!isRunning(syncName)) {
@@ -161,6 +184,7 @@ public abstract class StatusChecker<T> extends AsyncIntervalProcess<T>
 				default :
 					// do nothing status
 					// - INITIAL_IMPORTING
+					// - WAITING_RETRY
 					// - UNKNOWN
 					break;
 				}
@@ -190,14 +214,6 @@ public abstract class StatusChecker<T> extends AsyncIntervalProcess<T>
 		}
 		return;
 	}
-
-	/**
-	 **********************************
-	 * check status
-	 * @return true if continue check process, false to stop check process
-	 **********************************
-	 */
-	protected abstract boolean doCheckStatus();
 
 	/**
 	 **********************************
@@ -272,7 +288,7 @@ public abstract class StatusChecker<T> extends AsyncIntervalProcess<T>
 	public boolean stopIndexer(String syncName) {
 		if (isRunning(syncName)) {
 			SyncConfig config = getConfigs().get(syncName);
-			if (config != null) {
+					if (config != null) {
 				updateStatus(config, Status.STOPPED, null);
 				logger.debug("[{}] stopping sync.", syncName);
 			} else {
@@ -280,6 +296,8 @@ public abstract class StatusChecker<T> extends AsyncIntervalProcess<T>
 			}
 		} else {
 			logger.debug("[{}] sync process not running. ", syncName);
+			SyncConfig config = getConfigs().get(syncName);
+			updateStatus(config, Status.STOPPED, null);
 		}
 		return true;
 	}

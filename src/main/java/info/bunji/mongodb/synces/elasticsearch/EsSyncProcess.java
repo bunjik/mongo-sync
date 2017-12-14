@@ -6,10 +6,13 @@ package info.bunji.mongodb.synces.elasticsearch;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Properties;
+import java.util.TreeMap;
 
 import org.bson.BsonTimestamp;
 import org.elasticsearch.ElasticsearchException;
 import org.elasticsearch.action.ActionRequest;
+import org.elasticsearch.action.DocumentRequest;
+import org.elasticsearch.action.bulk.BackoffPolicy;
 import org.elasticsearch.action.bulk.BulkItemResponse;
 import org.elasticsearch.action.bulk.BulkProcessor;
 import org.elasticsearch.action.bulk.BulkRequest;
@@ -115,12 +118,9 @@ public class EsSyncProcess extends SyncProcess implements BulkProcessor. Listene
 	@Override
 	public void doInsert(SyncOperation op) {
 		// ステータス更新リクエストの場合は、無条件に更新
-		if (op.getDestDbName() == null) {
-			op.setDestDbName(EsStatusChecker.CONFIG_INDEX);
+		if (EsStatusChecker.CONFIG_INDEX.equals(op.getDestDbName())) {
 			getBulkProcessor().add(makeIndexRequest(op));
 		} else if (getConfig().isTargetCollection(op.getCollection())) {
-			//同期対象チェック
-			getConfig().addSyncCount();
 			getBulkProcessor().add(makeIndexRequest(op));
 		}
 	}
@@ -144,11 +144,18 @@ public class EsSyncProcess extends SyncProcess implements BulkProcessor. Listene
 	 */
 	@Override
 	public void doDelete(SyncOperation op) {
-		//同期対象チェック
-//		if (getConfig().isTargetCollection(op.getCollection())) {
-			getConfig().addSyncCount();
-			getBulkProcessor().add(makeDeleteRequest(op));
-//		}
+		getBulkProcessor().add(makeDeleteRequest(op));
+	}
+
+	/*
+	 **********************************
+	 * (non Javadoc)
+	 * @see info.bunji.mongodb.synces.SyncProcess#doCreateCollection(info.bunji.mongodb.synces.SyncOperation)
+	 **********************************
+	 */
+	@Override
+	protected void doCreateCollection(SyncOperation op) {
+		// do nothing.
 	}
 
 	/*
@@ -159,7 +166,10 @@ public class EsSyncProcess extends SyncProcess implements BulkProcessor. Listene
 	 */
 	@Override
 	public void doDropCollection(SyncOperation op) {
-		// es2.x はtypeの削除が不可となったため、1件づつデータを削除する
+		// 既存リクエスト分を反映
+		_processor.flush();
+
+		// es2.x以降はtypeの削除が不可となったため、1件づつデータを削除する
 		// 削除処理はoplogとの不整合を防ぐため、同期で実行する
 		String syncName = getConfig().getSyncName();
 		logger.info(op.getOp() + " index:" + indexName + " type:" + op.getCollection());
@@ -179,7 +189,6 @@ public class EsSyncProcess extends SyncProcess implements BulkProcessor. Listene
 	 */
 	private IndexRequest makeIndexRequest(SyncOperation op) {
 		return new IndexRequest(op.getDestDbName(), op.getCollection(), op.getId()).source(op.getJson());
-//		return EsUtils.makeIndexRequest(op.getDestDbName(), op.getCollection(), op.getId(), op.getJson());
 	}
 
 	/**
@@ -190,9 +199,7 @@ public class EsSyncProcess extends SyncProcess implements BulkProcessor. Listene
 	 ********************************************
 	 */
 	private DeleteRequest makeDeleteRequest(SyncOperation op) {
-		return new DeleteRequest(op.getDestDbName())
-								.type(op.getCollection())
-								.id(op.getId());
+		return new DeleteRequest(op.getDestDbName(), op.getCollection(), op.getId());
 	}
 
 	/**
@@ -210,6 +217,7 @@ public class EsSyncProcess extends SyncProcess implements BulkProcessor. Listene
 					.setBulkActions(DEFAULT_BUlK_ACTIONS)
 					.setBulkSize(new ByteSizeValue(DEFAULT_BULK_SIZE, ByteSizeUnit.MB))
 					.setFlushInterval(TimeValue.timeValueMillis(DEFAULT_BUlK_INTERVAL))
+					.setBackoffPolicy(BackoffPolicy.exponentialBackoff())
 					.setConcurrentRequests(1)
 					.build();
 		}
@@ -236,30 +244,24 @@ public class EsSyncProcess extends SyncProcess implements BulkProcessor. Listene
 	 */
 	@Override
 	public void afterBulk(long executionId, BulkRequest request, Throwable failure) {
-		int update = 0;
-		int delete = 0;
-		int other  = 0;
-		for (ActionRequest<?> req : request.requests()) {
-			if (req instanceof IndexRequest || req instanceof UpdateRequest) {
-				update++;
-			} else if (req instanceof DeleteRequest) {
-				delete++;
-			} else {
-				other++;
-			}
-		}
 
+		BulkDetail detail = new BulkDetail(request);
 		logger.error(String.format("[%s] bulk failure. size=[%d] oplog=[%s] op=[upsert={}/delete={}/other={}] : %s",
-									getConfig().getSyncName(),
-									request.requests().size(),
-									DocumentUtils.toDateStr(requestOplogTs.get(executionId)),
-									update, delete, other,
-									failure.getMessage()
-								), failure);
+				getConfig().getSyncName(),
+				detail.getLength(),
+				DocumentUtils.toDateStr(requestOplogTs.get(executionId)),
+				detail.update, detail.delete, detail.other,
+				failure.getMessage()
+			), failure);
+		logger.trace("[{}] {}", getConfig().getSyncName(), detail);
+
+		getConfig().addSyncCount(detail.getModified());
 
 //		if (failure instanceof UnavailableShardsException) {
 //			// shard status error.
 //			// TODO if bulk process fatal error, stop sync or retry?
+//			// retryするなら、今回のbulk分も再実行すべきなので、この処理内では収まらないはず
+//			// 再度、最終更新分からoplogの再同期が必要で、statusの更新をしてはいけない
 //		}
 
 		// if target index closed, stop sync(not update status)
@@ -284,29 +286,18 @@ public class EsSyncProcess extends SyncProcess implements BulkProcessor. Listene
 	 */
 	@Override
 	public void afterBulk(long executionId, BulkRequest request, BulkResponse response) {
-		if (logger.isTraceEnabled()) {
-			int update = 0;
-			int delete = 0;
-			int other  = 0;
-			for (BulkItemResponse item : response) {
-				String opType = item.getOpType();
-				switch(opType) {
-				case "index" :
-				case "update" :
-					update++; break;
-				case "delete" :
-					delete++; break;
-				default :
-					other++; break;
-				}
-			}
-			logger.trace(String.format("[%s] bulk size=[%4d] oplog=[%s] op=[upsert=%d/delete=%d/other=%d](%4dms)",
-								getConfig().getSyncName(),
-								response.getItems().length,
-								DocumentUtils.toDateStr(requestOplogTs.get(executionId)),
-								update, delete, other,
-								response.getTookInMillis()));
+		BulkDetail detail = new BulkDetail(response);
+		if (logger.isTraceEnabled() && !detail.isEmpty()) {
+			logger.debug(String.format("[%s] bulk size=[%4d] oplog=[%s] op=[upsert=%d/delete=%d/other=%d](%4dms)",
+					getConfig().getSyncName(),
+					detail.getLength(),
+					DocumentUtils.toDateStr(requestOplogTs.get(executionId)),
+					detail.update, detail.delete, detail.other,
+					response.getTookInMillis()));
+			logger.trace("[{}] {}", getConfig().getSyncName(), detail);
 		}
+
+		getConfig().addSyncCount(detail.getModified());
 
 		for (BulkItemResponse item : response) {
 			if (item.isFailed()) {
@@ -315,14 +306,138 @@ public class EsSyncProcess extends SyncProcess implements BulkProcessor. Listene
 								item.getFailureMessage());
 			}
 		}
+		requestOplogTs.remove(executionId);
+	}
 
-		// update status
-		if (requestOplogTs.containsKey(executionId)) {
-			BsonTimestamp ts = requestOplogTs.remove(executionId);
-			esClient.update(EsUtils.makeStatusRequest(getConfig(), null, ts)).actionGet();
-			EsUtils.refreshIndex(esClient, EsStatusChecker.CONFIG_INDEX);
-		} else {
-			logger.warn("unknown bulk executionId({}). status not update.", executionId);
+	/**
+	 ********************************************
+	 * 
+	 ********************************************
+	 */
+	private static class BulkDetail {
+
+		private int update = 0;
+		private int delete = 0;
+		private int other  = 0;
+		//private int failed = 0;
+
+		private Map<String, ActionCount> actionMap = new TreeMap<>();
+		
+		/**
+		 ******************************
+		 * 
+		 * @param res
+		 ******************************
+		 */
+		public BulkDetail(BulkResponse res) {
+			if (res != null) {
+				for (BulkItemResponse item : res) {
+					String index = item.getIndex();
+					String type = item.getType();
+					switch (item.getOpType()) {
+					case "index" :
+					case "update" :
+						incCount(index, type);
+						break;
+					case "delete" :
+						decCount(index, type);
+						break;
+					default :
+						other++;
+						break;	// do nothing.
+					}
+				}
+			}
+		}
+
+		/**
+		 ******************************
+		 * 
+		 * @param req
+		 ******************************
+		 */
+		public BulkDetail(BulkRequest req) {
+			if (req != null) {
+				for (ActionRequest<?> action : req.requests()) {
+					if (action instanceof IndexRequest || action instanceof UpdateRequest) {
+						String index = DocumentRequest.class.cast(action).index();
+						String type = DocumentRequest.class.cast(action).type();
+						incCount(index, type);
+					} else if (action instanceof DeleteRequest) {
+						String index = DocumentRequest.class.cast(action).index();
+						String type = DocumentRequest.class.cast(action).type();
+						decCount(index, type);
+					} else {
+						other++;
+					}
+				}
+			}
+		}
+		
+		public int getLength() {
+			return update + delete + other;
+		}
+
+		public int getModified() {
+			return update + delete;
+		}
+
+		private void incCount(final String index, final String typeName) {
+			if (!EsStatusChecker.CONFIG_INDEX.equals(index)) {
+				if (!actionMap.containsKey(typeName)) {
+					actionMap.put(typeName, new ActionCount());
+				}
+				actionMap.get(typeName).add();
+				update++;
+			}
+		}
+
+		private void decCount(final String index, final String typeName) {
+			if (!EsStatusChecker.CONFIG_INDEX.equals(index)) {
+				if (!actionMap.containsKey(typeName)) {
+					actionMap.put(typeName, new ActionCount());
+				}
+				actionMap.get(typeName).del();
+				delete++;
+			}
+		}
+
+		public boolean isEmpty() {
+			return actionMap.isEmpty();
+		}
+
+		@Override
+		public String toString() {
+			return actionMap.toString();
+		}
+	}
+
+	/**
+	 * 
+	 */
+	private static class ActionCount {
+		private int add = 0;
+		private int del = 0;
+
+		public void add() {
+			add++;
+		}
+
+		public void del() {
+			del++;
+		}
+
+		@Override
+		public String toString() {
+			String ret = "(-)";
+			if (add != 0 && del != 0) {
+				ret = String.format("(U:%d/D:%d)", add, del);
+			} else if (add == 0) {
+				ret = String.format("(D:%d)", del);
+			} else if (del == 0) {
+				ret = String.format("(U:%d)", add);
+			}
+			return ret;
 		}
 	}
 }

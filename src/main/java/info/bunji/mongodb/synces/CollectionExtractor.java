@@ -112,10 +112,12 @@ public class CollectionExtractor extends AsyncProcess<SyncOperation> {
 				}
 			}
 			logger.info("[{}] import collection finished.", syncName);
-			
-			Document statusDoc = DocumentUtils.makeStatusDocument(Status.RUNNING, null, timestamp);
-			append(new SyncOperation(Operation.UPDATE, "status", statusDoc, config.getSyncName()));
-			
+
+			append(DocumentUtils.makeStatusOperation(Status.RUNNING, config, timestamp));
+			config.setStatus(Status.RUNNING);
+			config.setLastOpTime(timestamp);
+			append(DocumentUtils.makeStatusOperation(config));
+
 		} catch (Throwable t) {
 			config.setStatus(Status.INITIAL_IMPORT_FAILED);
 			logger.error("[{}] initial import failed.({})", syncName, t.getMessage(), t);

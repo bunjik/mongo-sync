@@ -17,6 +17,7 @@ package info.bunji.mongodb.synces;
 
 import java.lang.reflect.Type;
 import java.util.Date;
+import java.util.Objects;
 
 import org.apache.commons.lang3.builder.ToStringBuilder;
 import org.apache.commons.lang3.builder.ToStringStyle;
@@ -100,7 +101,11 @@ public class SyncOperation {
 		this.destDbName = destDbName;
 		this.collection = collection;
 		this.doc = doc;
-		this.id = doc != null ? doc.remove("_id").toString() : null;
+		//this.id = doc != null ? doc.remove("_id").toString() : null;
+		this.id = Objects.toString(doc.remove("_id"), null);
+		if (this.id == null) {
+			op = Operation.UNKNOWN;
+		}
 		this.ts = (BsonTimestamp) ts;
 	}
 
@@ -146,7 +151,7 @@ public class SyncOperation {
 
 		Document o1Doc = oplogDoc.get("o", Document.class);
 		Document o2Doc = oplogDoc.get("o2", Document.class);
-		
+
 		switch (op) {
 		case INSERT :
 			if (o1Doc != null && o1Doc.containsKey(SyncConfig.ID_FIELD)) {
@@ -165,7 +170,9 @@ public class SyncOperation {
 			} else {
 				this.doc = o1Doc;
 			}
-			this.id = o2Doc.getObjectId("_id").toString();
+			//this.id = o2Doc.get("_id").toString();
+			this.id = Objects.toString(o2Doc.get("_id"), null);
+			if (this.id == null) this.op = Operation.UNKNOWN;
 			break;
 		case COMMAND :
 			if (o1Doc.containsKey("drop")) {

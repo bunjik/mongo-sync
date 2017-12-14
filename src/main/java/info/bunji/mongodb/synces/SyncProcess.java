@@ -13,7 +13,7 @@ import info.bunji.asyncutil.AsyncResult;
 
 /**
  ************************************************
- * ssync process base implementation.
+ * sync process base implementation.
  * @author Fumiharu Kinoshita
  ************************************************
  */
@@ -73,7 +73,7 @@ public abstract class SyncProcess extends AsyncProcess<Boolean>
 					doCreateCollection(op);
 					break;
 				default:
-					logger.warn("[{}] unsupported operation. [{}/{}]",
+					logger.info("[{}] unsupported operation. [{}/{}]",
 											syncName, op.getCollection(), op.getOp());
 					break;
 				}
@@ -112,7 +112,7 @@ public abstract class SyncProcess extends AsyncProcess<Boolean>
 	 **********************************
 	 */
 	protected void doInsert(SyncOperation op) {
-		logger.warn("unsupported operation. [{}/{}]", op.getCollection(), op.getOp());
+		logger.debug("unsupported operation. [{}/{}]", op.getCollection(), op.getOp());
 	}
 
 	/**
@@ -122,7 +122,7 @@ public abstract class SyncProcess extends AsyncProcess<Boolean>
 	 **********************************
 	 */
 	protected void doUpdate(SyncOperation op) {
-		logger.warn("unsupported operation. [{}/{}]", op.getCollection(), op.getOp());
+		logger.debug("unsupported operation. [{}/{}]", op.getCollection(), op.getOp());
 	}
 
 	/**
@@ -132,7 +132,7 @@ public abstract class SyncProcess extends AsyncProcess<Boolean>
 	 **********************************
 	 */
 	protected void doDelete(SyncOperation op) {
-		logger.warn("unsupported operation. [{}/{}]", op.getCollection(), op.getOp());
+		logger.debug("unsupported operation. [{}/{}]", op.getCollection(), op.getOp());
 	}
 
 	/**
@@ -142,7 +142,7 @@ public abstract class SyncProcess extends AsyncProcess<Boolean>
 	 **********************************
 	 */
 	protected void doCreateCollection(SyncOperation op) {
-		logger.warn("unsupported operation. [{}/{}]", op.getCollection(), op.getOp());
+		logger.debug("unsupported operation. [{}/{}]", op.getCollection(), op.getOp());
 	}
 
 	/**
@@ -152,7 +152,7 @@ public abstract class SyncProcess extends AsyncProcess<Boolean>
 	 **********************************
 	 */
 	protected void doDropCollection(SyncOperation op) {
-		logger.warn("unsupported operation. [{}/{}]", op.getCollection(), op.getOp());
+		logger.debug("unsupported operation. [{}/{}]", op.getCollection(), op.getOp());
 	}
 
 	/**
@@ -162,7 +162,7 @@ public abstract class SyncProcess extends AsyncProcess<Boolean>
 	 **********************************
 	 */
 	protected void doDropDatabse(SyncOperation op) {
-		logger.warn("unsupported operation. [{}/{}]", op.getCollection(), op.getOp());
+		logger.debug("unsupported operation. [{}/{}]", op.getCollection(), op.getOp());
 	}
 
 	/*

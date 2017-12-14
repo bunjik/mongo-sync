@@ -16,18 +16,29 @@ import org.bson.BsonTimestamp;
  ************************************************
  */
 public final class SyncStatus {
+	/** sync status */
 	private Status status;
+	/** last sync oplog timestamp */
 	private BsonTimestamp lastOpTime;
+	/** last document sync timestamp */
+	private BsonTimestamp lastSyncTime;
+	/**  */
 	private String lastError;
 
+	@SuppressWarnings("unchecked")
 	public SyncStatus(Map<String, Object> map) {
 		this.status = Status.fromString(map.get("status"));
-		@SuppressWarnings("unchecked")
 		Map<String, Number> ts = (Map<String, Number>) map.get("lastOpTime");
 		if (ts != null) {
 			int sec = ts.get("seconds").intValue();
 			int inc = ts.get("inc").intValue();
 			this.lastOpTime = new BsonTimestamp(sec, inc);
+		}
+		ts = (Map<String, Number>) map.get("lastSyncTime");
+		if (ts != null) {
+			int sec = ts.get("seconds").intValue();
+			int inc = ts.get("inc").intValue();
+			this.lastSyncTime = new BsonTimestamp(sec, inc);
 		}
 	}
 
@@ -39,12 +50,16 @@ public final class SyncStatus {
 		return lastOpTime;
 	}
 
-//	public String toJson() {
-//		return EsUtils.makeStatusJson(status, null, lastOpTime);
-//	}
+	public BsonTimestamp getLastSyncTime() {
+		return lastSyncTime;
+	}
 
 	public String getLastError() {
 		return lastError;
+	}
+
+	public void setLastSyncTime(BsonTimestamp lastSyncTime) {
+		this.lastSyncTime = lastSyncTime;
 	}
 
 	public void setLastError(String lastError) {

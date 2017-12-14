@@ -9,13 +9,14 @@ package info.bunji.mongodb.synces;
  */
 public enum Status {
 	UNKNOWN,
-    STARTING,	// delete
-    START_FAILED,
-    RUNNING,
-    STOPPED,
+	STARTING,	// delete
+	START_FAILED,
+	RUNNING,
+	STOPPED,
 //    IMPORT_FAILED,
-    INITIAL_IMPORTING,
-    INITIAL_IMPORT_FAILED;
+	INITIAL_IMPORTING,
+	INITIAL_IMPORT_FAILED,
+	WAITING_RETRY;
 
     public static final Status fromString(Object status) {
 		Status ret = Status.UNKNOWN;

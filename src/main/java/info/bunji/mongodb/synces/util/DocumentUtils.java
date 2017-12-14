@@ -16,7 +16,10 @@ import org.slf4j.LoggerFactory;
 
 import com.mongodb.DBObject;
 
+import info.bunji.mongodb.synces.Operation;
 import info.bunji.mongodb.synces.Status;
+import info.bunji.mongodb.synces.SyncConfig;
+import info.bunji.mongodb.synces.SyncOperation;
 import info.bunji.mongodb.synces.elasticsearch.EsUtils;
 
 /**
@@ -27,10 +30,11 @@ import info.bunji.mongodb.synces.elasticsearch.EsUtils;
  */
 public class DocumentUtils {
 
-	private Logger logger = LoggerFactory.getLogger(DocumentUtils.class);
+	private static Logger logger = LoggerFactory.getLogger(DocumentUtils.class);
 
 	private DocumentUtils() {
 		// do nothing.
+		throw new IllegalAccessError();
 	}
 
 	/**
@@ -44,8 +48,62 @@ public class DocumentUtils {
 		return Document.parse(json);
 	}
 
+	/**
+	 ********************************************
+	 * 
+	 * @param status
+	 * @param indexCnt
+	 * @param ts
+	 * @return
+	 ********************************************
+	 */
 	public static Document makeStatusDocument(Status status, Long indexCnt, BsonTimestamp ts) {
 		return fromJson(EsUtils.makeStatusJson(status, indexCnt, ts));
+	}
+
+	/**
+	 ********************************************
+	 * 
+	 * @param status
+	 * @param id
+	 * @param ts
+	 * @return
+	 ********************************************
+	 */
+	public static Document makeStatusDocument(Status status, String id, BsonTimestamp ts) {
+		Document doc = new Document();
+		doc.append("_id", id);
+		doc.append("status", status.name());
+		if (ts != null) {
+			doc.append("lastOpTime", ts);
+		}
+		if (ts != null) {
+			doc.append("lastSyncTime", ts);
+		}
+		return doc;
+	}
+
+	// oplog相当のOperationを生成する
+	public static SyncOperation makeStatusOperation(SyncConfig config) {
+		return makeStatusOperation(config.getStatus(), config, config.getLastOpTime());
+	}
+
+	// oplog相当のOperationを生成する
+	public static SyncOperation makeStatusOperation(Status status, SyncConfig config, BsonTimestamp ts) {
+		Document o1Doc = new Document("status", status.name());
+		if (ts != null) {
+			o1Doc.append("lastOpTime", new Document("seconds", ts.getTime()).append("inc", ts.getInc()));
+		}
+		Document opDoc = new Document()
+							.append("op", Operation.UPDATE.getValue())
+							.append("ns", config.getMongoDbName() + ".status")
+							.append("o", o1Doc)
+							.append("o2", new Document("_id", config.getSyncName()))
+							.append("ts", ts);
+		//return new SyncOperation(opDoc, config.getConfigDbName());
+		SyncOperation op = new SyncOperation(opDoc, config.getConfigDbName());
+//		logger.debug(op.toString());
+		return op;
 	}
 
 	/**
