@@ -113,9 +113,11 @@ int checkPoint = 0;
 						// 取得できた最新のタイムスタンプから同期を再開する
 						timestamp = tmpTs;
 					}
+					config.setStatus(Status.RUNNING);
 					config.setLastOpTime(timestamp);
-					append(DocumentUtils.makeStatusOperation(config));
+					//append(DocumentUtils.makeStatusOperation(config));
 					//append(DocumentUtils.makeStatusOperation(Status.RUNNING, config, timestamp));
+					append(SyncOperation.fromConfig(config));
 				}
 
 				// oplogを継続的に取得
@@ -138,25 +140,20 @@ int checkPoint = 0;
 
 					timestamp = op.getTimestamp();
 
-					// TODO 更新がなくても定期的に同期時刻は更新すべきか
-					// そうしないと、長期間更新のない同期で、out of dateとなる可能性がある
-					
 					// check target database and collection
 					if(!config.getMongoDbName().equals(op.getSrcDbName()) || !config.isTargetCollection(op.getCollection())) {
-
-if (++checkPoint >= 10000) {
-	// 無更新が一定回数継続したらステータスの最終同期時刻のみ更新する
-//	EsUtils.makeStatusRequest(config, null, timestamp);
-//	Document confDoc = DocumentUtils.fromJson(json);
-//	SyncOperation cpOp = new SyncOperation(Operation.UPDATE, config.getConfigDbName(), null, config.getDestDbName());
-//	cpOp.setDoc(confDoc);
-
-	Document statusDoc = DocumentUtils.makeStatusDocument(Status.RUNNING, config.getDestDbName(), timestamp);
-
-	checkPoint = 0;		// clear check count
-	
-}
-						continue;
+						if (++checkPoint >= 10000) {
+							// 無更新が一定回数継続したらステータスの最終同期時刻のみ更新する
+							config.setLastOpTime(timestamp);
+							//config.setLastSyncTime(timestamp);
+							//op = DocumentUtils.makeStatusOperation(config);
+							op = SyncOperation.fromConfig(config);
+							checkPoint = 0;		// clear check count
+						} else {
+							continue;
+						}
+					} else {
+						checkPoint = 0;
 					}
 
 					if (op.isPartialUpdate()) {
@@ -164,8 +161,7 @@ if (++checkPoint >= 10000) {
 						MongoCollection<Document> collection = getMongoCollection(op.getCollection());
 						Document updateDoc = collection.find(oplog.get("o2", Document.class)).first();
 						if (updateDoc == null) {
-							// skip update 
-							continue;
+							continue;	// skip update 
 						}
 						op.setDoc(updateDoc);
 					}
@@ -174,8 +170,7 @@ if (++checkPoint >= 10000) {
 					if (op.getDoc() != null) {
 						Document filteredDoc = DocumentUtils.applyFieldFilter(op.getDoc(), includeFields, excludeFields);
 						if (filteredDoc.isEmpty()) {
-							// no change sync fields
-							continue;
+							continue;	// no change sync fields
 						}
 						op.setDoc(filteredDoc);
 					}

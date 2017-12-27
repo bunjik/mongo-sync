@@ -1,5 +1,17 @@
-/**
+/*
+ * Copyright 2016 Fumiharu Kinoshita
  *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 package info.bunji.mongodb.synces.elasticsearch;
 
@@ -102,11 +114,23 @@ public class EsSyncProcess extends SyncProcess implements BulkProcessor. Listene
 			_processor.flush();
 			_processor.close();
 		}
+		logger.debug("call postProcess() flushed.");
+
 		// update status
+		SyncConfig config = getConfig();
+		if (Status.RUNNING.equals(config.getStatus())) {
+//			esClient.update(EsUtils.makeStatusRequest(getConfig(), Status.STOPPED, null)).actionGet();
+//			EsUtils.refreshIndex(esClient, EsStatusChecker.CONFIG_INDEX);
+		}
 		esClient.update(EsUtils.makeStatusRequest(getConfig(), Status.STOPPED, null)).actionGet();
 		EsUtils.refreshIndex(esClient, EsStatusChecker.CONFIG_INDEX);
 
 		super.postProcess();
+	}
+
+	protected boolean isTargetOp(SyncOperation op) {
+		return EsStatusChecker.CONFIG_INDEX.equals(op.getDestDbName())
+				|| getConfig().isTargetCollection(op.getCollection());
 	}
 
 	/*
@@ -117,12 +141,7 @@ public class EsSyncProcess extends SyncProcess implements BulkProcessor. Listene
 	 */
 	@Override
 	public void doInsert(SyncOperation op) {
-		// ステータス更新リクエストの場合は、無条件に更新
-		if (EsStatusChecker.CONFIG_INDEX.equals(op.getDestDbName())) {
-			getBulkProcessor().add(makeIndexRequest(op));
-		} else if (getConfig().isTargetCollection(op.getCollection())) {
-			getBulkProcessor().add(makeIndexRequest(op));
-		}
+		getBulkProcessor().add(makeIndexRequest(op));
 	}
 
 	/*
@@ -233,7 +252,13 @@ public class EsSyncProcess extends SyncProcess implements BulkProcessor. Listene
 	@Override
 	public void beforeBulk(long executionId, BulkRequest request) {
 		// keep oplog time per executionId
-		requestOplogTs.put(executionId, getCurOplogTs());
+		BsonTimestamp ts = getCurOplogTs();	// 既に更新されているかも？
+		requestOplogTs.put(executionId, ts);
+
+		// add status update request.
+		SyncConfig config = getConfig();
+		config.setLastOpTime(ts);
+		request.add(makeIndexRequest(SyncOperation.fromConfig(config)));
 	}
 
 	/**
@@ -246,7 +271,7 @@ public class EsSyncProcess extends SyncProcess implements BulkProcessor. Listene
 	public void afterBulk(long executionId, BulkRequest request, Throwable failure) {
 
 		BulkDetail detail = new BulkDetail(request);
-		logger.error(String.format("[%s] bulk failure. size=[%d] oplog=[%s] op=[upsert={}/delete={}/other={}] : %s",
+		logger.error(String.format("[%s] bulk failure. size=[%d] oplog=[%s] op=[upsert={%d}/delete={%d}/other={%d}] : %s",
 				getConfig().getSyncName(),
 				detail.getLength(),
 				DocumentUtils.toDateStr(requestOplogTs.get(executionId)),

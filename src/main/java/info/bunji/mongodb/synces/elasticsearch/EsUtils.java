@@ -60,6 +60,7 @@ public class EsUtils {
 
 	private EsUtils() {
 		// do nothing.
+		throw new IllegalAccessError("can't create instance.");
 	}
 
 	/**
@@ -210,6 +211,14 @@ public class EsUtils {
 		return true;
 	}
 
+
+	@Deprecated
+	public static boolean updateStatus(Client esClient, SyncConfig config) {
+		
+		
+		return true;
+	}
+	
 	/**
 	 ********************************************
 	 * create status update request.

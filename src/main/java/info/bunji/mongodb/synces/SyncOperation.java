@@ -64,6 +64,12 @@ public class SyncOperation {
 		builder.registerTypeAdapter(BsonTimestamp.class, new JsonSerializer<BsonTimestamp>() {
 			@Override
 			public JsonElement serialize(BsonTimestamp src, Type typeOfSrc, JsonSerializationContext context) {
+
+//				JsonObject obj = new JsonObject();
+//				obj.add("seconds", new JsonPrimitive(src.getTime()));
+//				obj.add("inc", new JsonPrimitive(src.getInc()));
+//				return obj;
+
 				// convert from epoctime
 				DateTime dt = new DateTime((long) src.getTime() * 1000L);
 				return new JsonPrimitive(dt.toString());
@@ -166,10 +172,12 @@ public class SyncOperation {
 			break;
 		case UPDATE :
 			if (o1Doc.containsKey("$unset") || o1Doc.containsKey("$set")) {
+logger.debug(o1Doc.toJson());
 				this.isPartialUpdate = true;
 			} else {
 				this.doc = o1Doc;
 			}
+this.doc = o1Doc;
 			//this.id = o2Doc.get("_id").toString();
 			this.id = Objects.toString(o2Doc.get("_id"), null);
 			if (this.id == null) this.op = Operation.UNKNOWN;
@@ -278,13 +286,14 @@ public class SyncOperation {
 
 	/**
 	 **********************************
-	 * get document.
+	 * set document.
 	 * @return document
 	 **********************************
 	 */
 	public void setDoc(Document doc) {
 		doc.remove("_id");
 		this.doc = doc;
+		isPartialUpdate = false;
 	}
 
 
@@ -296,6 +305,33 @@ public class SyncOperation {
 	 */
 	public String getJson() {
 		return gson.toJson(doc);
+	}
+
+	/**
+	 **********************************
+	 * 
+	 * @param config
+	 * @return
+	 **********************************
+	 */
+	public static SyncOperation fromConfig(SyncConfig config) {
+		Document o1Doc = new Document("status", config.getStatus().name());
+		BsonTimestamp lastOp = config.getLastOpTime();
+		if (lastOp != null) {
+			o1Doc.append("lastOpTime", new Document("seconds", lastOp.getTime()).append("inc", lastOp.getInc()));
+		}
+		BsonTimestamp lastSync = config.getLastSyncTime();
+		if (lastSync != null) {
+			o1Doc.append("lastSyncTime", new Document("seconds", lastSync.getTime()).append("inc", lastSync.getInc()));
+		}
+
+		Document opDoc = new Document()
+							.append("op", Operation.UPDATE.getValue())
+							.append("ns", config.getMongoDbName() + ".status")
+							.append("o", o1Doc)
+							.append("o2", new Document("_id", config.getSyncName()))
+							.append("ts", lastOp);
+		return new SyncOperation(opDoc, config.getConfigDbName());
 	}
 
 	/*

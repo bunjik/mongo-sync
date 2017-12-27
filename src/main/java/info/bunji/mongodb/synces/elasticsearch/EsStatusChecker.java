@@ -298,7 +298,7 @@ public class EsStatusChecker extends StatusChecker<Boolean> {
 				SyncStatus status = new SyncStatus(hit.sourceAsMap());
 				config.setStatus(status.getStatus());
 				config.setLastOpTime(status.getLastOpTime());
-//config.setLastOpTime(status.getLastSyncTime());
+				config.setLastSyncTime(status.getLastSyncTime());
 				if (getIndexer(config.getSyncName()) != null) {
 					config.addSyncCount(getIndexer(config.getSyncName()).getConfig().getSyncCount());
 				}

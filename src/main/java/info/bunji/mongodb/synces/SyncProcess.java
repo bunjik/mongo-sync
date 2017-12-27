@@ -22,7 +22,7 @@ public abstract class SyncProcess extends AsyncProcess<Boolean>
 
 	private AsyncResult<SyncOperation> operations;
 	private SyncConfig config;
-	protected BsonTimestamp oplogTs;
+	protected transient BsonTimestamp oplogTs;
 
 	/**
 	 * @param config sync config
@@ -33,6 +33,11 @@ public abstract class SyncProcess extends AsyncProcess<Boolean>
 		this.operations = operations;
 	}
 
+	/**
+	 * 
+	 */
+	protected abstract boolean isTargetOp(SyncOperation op);
+	
 	/**
 	 * 
 	 * @param e occurred exeption
@@ -51,6 +56,10 @@ public abstract class SyncProcess extends AsyncProcess<Boolean>
 			for (SyncOperation op : operations) {
 				// get oplog timestamp
 				oplogTs = op.getTimestamp();
+
+				if (!isTargetOp(op)) {
+					continue;
+				}
 
 				switch (op.getOp()) {
 

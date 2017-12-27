@@ -151,9 +151,10 @@ public abstract class StatusChecker<T> extends AsyncIntervalProcess<T>
 							MongoCollection<Document> oplog  = client.getDatabase("local").getCollection("oplog.rs");
 							Document lastOp = oplog.find().sort(new BasicDBObject("$natural", -1)).limit(1).first();
 							config.setLastOpTime(lastOp.get("ts", BsonTimestamp.class));
-						}			
+						}
 						// create extractor for initial import.
 						extractor = new CollectionExtractor(config, null);
+//extractor = new CollectionExtractor(config, config.getLastOpTime());
 						updateStatus(config, Status.INITIAL_IMPORTING, null);
 					} else {
 						// faild initial import.
@@ -202,6 +203,11 @@ public abstract class StatusChecker<T> extends AsyncIntervalProcess<T>
 				SyncProcess indexer = createSyncProcess(config, result);
 				indexerMap.put(syncName, indexer);
 				AsyncExecutor.execute(indexer);
+
+//				AsyncResult<SyncOperation> result = AsyncExecutor.execute(extractor, syncQueueLimit);
+//				SyncProcess indexer = createSyncProcess(config, result);
+//				indexerMap.put(syncName, indexer);
+//				AsyncExecutor.execute(indexer);
 			}
 
 		}

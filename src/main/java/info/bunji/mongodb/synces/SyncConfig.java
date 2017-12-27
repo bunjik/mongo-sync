@@ -64,6 +64,9 @@ public class SyncConfig {
 	/**  */
 	private BsonTimestamp lastOpTime = null;
 
+	/**  */
+	private BsonTimestamp lastSyncTime = null;
+
 	/** sync status */
 	private Status status;
 
@@ -240,6 +243,15 @@ public class SyncConfig {
 
 	public void setLastOpTime(BsonTimestamp lastOpTime) {
 		this.lastOpTime = lastOpTime;
+		this.lastSyncTime = lastOpTime;
+	}
+
+	public BsonTimestamp getLastSyncTime() {
+		return lastSyncTime;
+	}
+
+	public void setLastSyncTime(BsonTimestamp lastSyncTime) {
+		this.lastSyncTime = lastSyncTime;
 	}
 
 	/**

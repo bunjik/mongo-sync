@@ -37,8 +37,7 @@ import info.bunji.mongodb.synces.util.DocumentUtils;
 
 /**
  ************************************************
- * Mongodbのデータ取得処理.
- *
+ * initial collection import process.
  * @author Fumiharu Kinoshita
  ************************************************
  */
@@ -77,6 +76,7 @@ public class CollectionExtractor extends AsyncProcess<SyncOperation> {
 
 		// 初期インポート処理
 		try (MongoClient client = MongoClientService.getClient(config)) {
+/*
 			if (timestamp == null) {
 				logger.info("[{}] start initial import from db [{}]", syncName, config.getMongoDbName());
 
@@ -111,12 +111,44 @@ public class CollectionExtractor extends AsyncProcess<SyncOperation> {
 					logger.info("[{}] initial import finished. [{}(total:{})]", syncName, collection, processed);
 				}
 			}
-			logger.info("[{}] import collection finished.", syncName);
+*/
 
-			append(DocumentUtils.makeStatusOperation(Status.RUNNING, config, timestamp));
+//=====================
+			logger.info("[{}] start initial import from db [{}]", syncName, config.getMongoDbName());
+
+			// 同期対象コレクション名の一覧を取得する
+			MongoDatabase db = client.getDatabase(config.getMongoDbName());
+
+			// コレクション毎に初期同期を行う
+			Object lastId = null;
+			for (String collection : getTargetColectionList(db)) {
+				logger.info("[{}] start initial import. [{}]", syncName, collection);
+
+				MongoCollection<Document> conn = db.getCollection(collection);
+				BasicDBObject filter = getFilterForInitialImport(new BasicDBObject(), lastId);
+
+				long count = conn.count(filter);
+
+				long processed = 0;
+				FindIterable<Document> results = conn.find(filter).sort(new BasicDBObject("_id", 1));
+				for (Document doc : results) {
+					Document filteredDoc = DocumentUtils.applyFieldFilter(doc, includeFields, excludeFields);
+					append(new SyncOperation(Operation.INSERT, index, collection, filteredDoc, null));
+					if ((++processed % LOGGING_INTERVAL) == 0) {
+						logger.info("[{}] processing initial import. [{}({}/{})]", syncName, collection, processed, count);
+					}
+				}
+				logger.info("[{}] initial import finished. [{}(total:{})]", syncName, collection, processed);
+			}			
+//=====================
+			logger.info("[{}] finish import collection(s).", syncName);
+
+//			append(DocumentUtils.makeStatusOperation(Status.RUNNING, config, timestamp));
 			config.setStatus(Status.RUNNING);
 			config.setLastOpTime(timestamp);
-			append(DocumentUtils.makeStatusOperation(config));
+//			config.setLastSyncTime(timestamp);
+//			append(DocumentUtils.makeStatusOperation(config));
+			append(SyncOperation.fromConfig(config));
 
 		} catch (Throwable t) {
 			config.setStatus(Status.INITIAL_IMPORT_FAILED);
