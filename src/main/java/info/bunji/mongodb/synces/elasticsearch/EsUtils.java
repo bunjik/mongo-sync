@@ -278,6 +278,12 @@ public class EsUtils {
 						.field("inc", ts.getInc())
 						.endObject();
 			}
+			if (ts != null) {
+				builder.startObject("lastSyncTime")
+						.field("seconds", ts.getTime())
+						.field("inc", ts.getInc())
+						.endObject();
+			}
 			if (indexCnt != null) {
 				builder.field("indexCnt", indexCnt);
 			}

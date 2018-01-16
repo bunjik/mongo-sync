@@ -15,11 +15,15 @@
  */
 package info.bunji.mongodb.synces.elasticsearch;
 
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.Map.Entry;
 import java.util.Properties;
 import java.util.TreeMap;
 
+import org.apache.commons.lang3.StringUtils;
 import org.bson.BsonTimestamp;
 import org.elasticsearch.ElasticsearchException;
 import org.elasticsearch.action.ActionRequest;
@@ -262,8 +266,6 @@ public class EsSyncProcess extends SyncProcess implements BulkProcessor. Listene
 		BsonTimestamp ts = getCurOplogTs();	// 既に更新されているかも？
 		requestOplogTs.put(executionId, ts);
 
-//request.requests().get(0);
-
 		// add status update request.
 		SyncConfig config = getConfig();
 		config.setLastOpTime(ts);
@@ -280,7 +282,7 @@ public class EsSyncProcess extends SyncProcess implements BulkProcessor. Listene
 	public void afterBulk(long executionId, BulkRequest request, Throwable failure) {
 
 		BulkDetail detail = new BulkDetail(request);
-		logger.error(String.format("[%s] bulk failure. size=[%d] oplog=[%s] op=[u=%d/d=%d/o=%d] : %s",
+		logger.error(String.format("[%s] bulk failure. size=[%d] oplog=[%s] op=[U=%d/D=%d/O=%d] : %s",
 				getConfig().getSyncName(),
 				detail.getLength(),
 				DocumentUtils.toDateStr(requestOplogTs.get(executionId)),
@@ -356,7 +358,7 @@ public class EsSyncProcess extends SyncProcess implements BulkProcessor. Listene
 		//private int failed = 0;
 
 		private Map<String, ActionCount> actionMap = new TreeMap<>();
-		
+
 		/**
 		 ******************************
 		 * 
@@ -442,12 +444,18 @@ public class EsSyncProcess extends SyncProcess implements BulkProcessor. Listene
 
 		@Override
 		public String toString() {
-			return actionMap.toString();
+			List<String> itemList = new ArrayList<>();
+			for (Entry<String, ActionCount> entry : actionMap.entrySet()) {
+				itemList.add(entry.getKey() + entry.getValue());
+			}
+			return StringUtils.join(itemList, ",");
 		}
 	}
 
 	/**
-	 * 
+	 ********************************************
+	 * action count by type.
+	 ********************************************
 	 */
 	private static class ActionCount {
 		private int add = 0;

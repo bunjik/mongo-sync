@@ -34,7 +34,6 @@ import info.bunji.asyncutil.AsyncExecutor;
 import info.bunji.asyncutil.AsyncIntervalProcess;
 import info.bunji.asyncutil.AsyncProcess;
 import info.bunji.asyncutil.AsyncResult;
-import rx.schedulers.Schedulers;
 
 /**
  ************************************************
@@ -156,11 +155,9 @@ public abstract class StatusChecker<T> extends AsyncIntervalProcess<T>
 						// create extractor for initial import.
 						config.setStatus(Status.INITIAL_IMPORTING);
 						extractor = new CollectionExtractor(config, null);
-//extractor = new CollectionExtractor(config, config.getLastOpTime());
 						updateStatus(config, Status.INITIAL_IMPORTING, null);
 					} else {
 						// faild initial import.
-						config.setStatus(Status.INITIAL_IMPORT_FAILED);
 						updateStatus(config, Status.INITIAL_IMPORT_FAILED, null);
 					}
 				}
@@ -206,8 +203,8 @@ public abstract class StatusChecker<T> extends AsyncIntervalProcess<T>
 //AsyncResult<SyncOperation> result = AsyncExecutor.execute(procList, 1, syncQueueLimit, Schedulers.io());
 				SyncProcess indexer = createSyncProcess(config, result);
 				indexerMap.put(syncName, indexer);
-//				AsyncExecutor.execute(indexer);
-AsyncExecutor.execute(indexer, Schedulers.computation());
+				AsyncExecutor.execute(indexer);
+//AsyncExecutor.execute(indexer, Schedulers.computation());
 			}
 		}
 
