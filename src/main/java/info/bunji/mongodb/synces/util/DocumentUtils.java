@@ -142,7 +142,7 @@ public class DocumentUtils {
 		}
 		return "";
 	}
-	
+
 	/**
 	 ********************************************
 	 * apply exclude field filter.

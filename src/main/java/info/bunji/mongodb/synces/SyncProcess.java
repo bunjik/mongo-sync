@@ -81,6 +81,9 @@ public abstract class SyncProcess extends AsyncProcess<Boolean>
 				case CREATE_COLLECTION:
 					doCreateCollection(op);
 					break;
+				case RENAME_COLLECTION:
+					doRenameCollection(op);
+					break;
 				default:
 					logger.info("[{}] unsupported operation. [{}/{}]",
 											syncName, op.getCollection(), op.getOp());
@@ -151,6 +154,16 @@ public abstract class SyncProcess extends AsyncProcess<Boolean>
 	 **********************************
 	 */
 	protected void doCreateCollection(SyncOperation op) {
+		logger.debug("unsupported operation. [{}/{}]", op.getCollection(), op.getOp());
+	}
+
+	/**
+	 **********************************
+	 * process collection rename operation.
+	 * @param op sync operation
+	 **********************************
+	 */
+	protected void doRenameCollection(SyncOperation op) {
 		logger.debug("unsupported operation. [{}/{}]", op.getCollection(), op.getOp());
 	}
 

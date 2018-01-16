@@ -5,6 +5,7 @@ public enum Operation {
 	UPDATE("u"),
 	DELETE("d"),
 	CREATE_COLLECTION("cc"),
+	RENAME_COLLECTION("rc"),
 	DROP_COLLECTION("dc"),
 	DROP_DATABASE("dd"),
 	COMMAND("c"),

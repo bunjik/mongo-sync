@@ -3,6 +3,8 @@
  */
 package info.bunji.mongodb.synces.elasticsearch;
 
+import java.util.concurrent.TimeUnit;
+
 import org.elasticsearch.action.bulk.BackoffPolicy;
 import org.elasticsearch.action.bulk.BulkProcessor;
 import org.elasticsearch.action.bulk.BulkRequest;
@@ -19,7 +21,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import info.bunji.asyncutil.AsyncProcess;
-import info.bunji.mongodb.synces.SyncConfig;
 
 /**
  ************************************************
@@ -33,14 +34,17 @@ public class EsTypeDeleteProcess extends AsyncProcess<Boolean> implements BulkPr
 	private Logger logger = LoggerFactory.getLogger(getClass());
 
 	private Client esClient;
-//	private SyncConfig config;
 	private String index;
 	private String type;
 
-	public EsTypeDeleteProcess(Client esClient, SyncConfig config, String type) {
+	private long delCnt = 0;
+	private long totalCnt = 0;
+
+//	private static final long LOG_SPAN = 5000L;
+
+	public EsTypeDeleteProcess(Client esClient, String index, String type) {
 		this.esClient = esClient;
-//		this.config = config;
-		this.index = config.getDestDbName();
+		this.index = index;
 		this.type = type;
 	}
 
@@ -49,7 +53,7 @@ public class EsTypeDeleteProcess extends AsyncProcess<Boolean> implements BulkPr
 	 */
 	@Override
 	protected void execute() throws Exception {
-		int delCnt = 0;
+		long start = System.currentTimeMillis();
 
 		if (EsUtils.isExistsIndex(esClient, index)) {
 			BulkProcessor bulkProc = BulkProcessor.builder(esClient, this)
@@ -65,18 +69,17 @@ public class EsTypeDeleteProcess extends AsyncProcess<Boolean> implements BulkPr
 				// all _id in type
 				SearchResponse response = esClient.prepareSearch(index)
 											.setTypes(type)
+											.setNoFields()
 											.setQuery(QueryBuilders.matchAllQuery())
 											.setScroll(scrollTimeout)
-											.setSize(3000)
+											.setSize(5000)
 											.setFetchSource(false)
 											.execute().actionGet();
+				totalCnt = response.getHits().getTotalHits();
+
 				while (true) {
 					boolean isExists = false;
 					for (SearchHit hit : response.getHits()) {
-						delCnt++;
-						if ((++delCnt % 5000) == 0) {
-							logger.debug("deleting " + index + "/" + type + "(" + delCnt + ")");
-						}
 						bulkProc.add(new DeleteRequest(index, type, hit.getId()));
 						isExists = true;
 					}
@@ -89,10 +92,13 @@ public class EsTypeDeleteProcess extends AsyncProcess<Boolean> implements BulkPr
 				}
 			} finally {
 				bulkProc.flush();
-				bulkProc.close();
+				//bulkProc.close();
+				bulkProc.awaitClose(1, TimeUnit.MINUTES);
 			}
-			logger.info("index type deleted. [" + index + "/" + type + "] " +  delCnt);
 		}
+		//logger.info("index type deleted. [" + index + "/" + type + "] " +  delCnt);
+		//logger.info("deleted {}/{} ({}docs)", index, type, delCnt);
+		logger.info("deleted {}/{} ({} docs) ({}ms)", index, type, delCnt, System.currentTimeMillis() - start);
 	}
 
 	@Override
@@ -102,14 +108,13 @@ public class EsTypeDeleteProcess extends AsyncProcess<Boolean> implements BulkPr
 
 	@Override
 	public void afterBulk(long executionId, BulkRequest request, BulkResponse response) {
-//		logger.debug("type deleting {}/{} [{}] ({}ms)",
-//						index, type, response.getItems(), response.getTook().getMillis());
-		// do nothing.
+		delCnt += request.numberOfActions();
+		logger.debug("deleting {}/{} [{}/{}] ({}ms)",
+						index, type, delCnt, totalCnt, response.getTook().getMillis());
 	}
 
 	@Override
 	public void afterBulk(long executionId, BulkRequest request, Throwable failure) {
 		// TODO 自動生成されたメソッド・スタブ
-		
 	}
 }

@@ -142,8 +142,6 @@ public class SyncOperation {
 	 */
 	public SyncOperation(Document oplogDoc, String destDbName) {
 
-		//logger.trace("oplog = \n{}", oplogDoc.toJson());
-
 		this.op = Operation.valueOf(oplogDoc.get("op"));
 		this.destDbName = destDbName;
 
@@ -172,12 +170,11 @@ public class SyncOperation {
 			break;
 		case UPDATE :
 			if (o1Doc.containsKey("$unset") || o1Doc.containsKey("$set")) {
-logger.debug(o1Doc.toJson());
 				this.isPartialUpdate = true;
-			} else {
-				this.doc = o1Doc;
+//			} else {
+//				this.doc = o1Doc;
 			}
-this.doc = o1Doc;
+			this.doc = o1Doc;
 			//this.id = o2Doc.get("_id").toString();
 			this.id = Objects.toString(o2Doc.get("_id"), null);
 			if (this.id == null) this.op = Operation.UNKNOWN;
@@ -191,6 +188,20 @@ this.doc = o1Doc;
 				// create collection
 				this.collection = o1Doc.getString("create");
 				this.op = Operation.CREATE_COLLECTION;
+			} else if (o1Doc.containsKey("renameCollection")) {
+				// rename collection(drop source collection)
+//				this.doc = o1Doc;
+//				doc.append("from", doc.remove("renameCollection"));
+//				this.op = Operation.RENAME_COLLECTION;
+				nsVals = o1Doc.getString("renameCollection").split("\\.", 2);
+				this.srcDbName = nsVals[0];
+				this.op = Operation.DROP_COLLECTION;
+				this.collection = o1Doc.getString("renameCollection");
+logger.debug(this.toString());
+
+				// TODO rename後のcollectionに対するoplogは発生しない(mongodb内の処理として扱われる)
+				// rename時は独自にコピーが必要？(oplog相当を生成するか？コレクション削除と同様に処理中の考慮が必要)
+
 			} else {
 				this.op = Operation.UNKNOWN;
 			}

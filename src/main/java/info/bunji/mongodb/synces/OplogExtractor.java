@@ -81,9 +81,8 @@ public class OplogExtractor extends AsyncProcess<SyncOperation> {
 		String index = config.getDestDbName();
 		String syncName = config.getSyncName();
 
-int checkPoint = 0;
-
 		// oplogからの取得処理
+		int checkPoint = 0;
 		int retryCnt = 0;
 		while (true) {
 			try (MongoClient client = MongoClientService.getClient(config)) {
@@ -105,19 +104,18 @@ int checkPoint = 0;
 										+ DocumentUtils.toDateStr(timestamp) + "(" +  timestamp + ")]");
 					}
 					//logger.trace("[{}] start oplog timestamp = [{}]", config.getSyncName(), timestamp);
-					config.addSyncCount(-1);	// 同期開始時に最終同期データを再度同期するため１減算しておく
+					//config.addSyncCount(-1);	// 同期開始時に最終同期データを再度同期するため１減算しておく
 
 					BsonTimestamp tmpTs = results.first().get("ts", BsonTimestamp.class);
 					if (!tmpTs.equals(timestamp)) {
 						// 一致しない場合、mongoのデータが過去に戻っている可能性があるため
 						// 取得できた最新のタイムスタンプから同期を再開する
 						timestamp = tmpTs;
+
+						config.setStatus(Status.RUNNING);
+						config.setLastOpTime(timestamp);
+						append(SyncOperation.fromConfig(config));
 					}
-					config.setStatus(Status.RUNNING);
-					config.setLastOpTime(timestamp);
-					//append(DocumentUtils.makeStatusOperation(config));
-					//append(DocumentUtils.makeStatusOperation(Status.RUNNING, config, timestamp));
-					append(SyncOperation.fromConfig(config));
 				}
 
 				// oplogを継続的に取得
@@ -135,7 +133,38 @@ int checkPoint = 0;
 
 				// get document from oplog
 				for (Document oplog : results) {
-					
+
+					// TODO 処理対象の判定はSyncOperation生成前のほうが速度・メモリ的に効率的？
+					SyncOperation op = null;
+					timestamp = oplog.get("ts", BsonTimestamp.class);
+					if (!"c".equals(oplog.get("op"))) {
+					//if (!Operation.COMMAND.equals(Operation.valueOf(oplog.get("op")))) {
+						// cmd以外
+						String ns = oplog.getString("ns");
+						String[] nsVals = ns.split("\\.", 2);
+						if(!config.getMongoDbName().equals(nsVals[0]) || !config.isTargetCollection(nsVals[1])) {
+							if (++checkPoint >= 10000) {
+								// 無更新が一定回数継続したらステータスの最終同期時刻のみ更新する
+								config.setLastOpTime(timestamp);
+								op = SyncOperation.fromConfig(config);
+								checkPoint = 0;		// clear check count
+								append(op);
+							}
+							continue;
+						} else {
+							op = new SyncOperation(oplog, index);
+							checkPoint = 0;
+						}
+					} else {
+						// cmd時は内容によってターゲット判定が必要なため変換
+						op = new SyncOperation(oplog, index);
+						if(!config.getMongoDbName().equals(op.getSrcDbName()) || !config.isTargetCollection(op.getCollection())) {
+							checkPoint++;
+							continue;
+						}
+					}
+
+/*
 					SyncOperation op = new SyncOperation(oplog, index);
 
 					timestamp = op.getTimestamp();
@@ -145,23 +174,22 @@ int checkPoint = 0;
 						if (++checkPoint >= 10000) {
 							// 無更新が一定回数継続したらステータスの最終同期時刻のみ更新する
 							config.setLastOpTime(timestamp);
-							//config.setLastSyncTime(timestamp);
-							//op = DocumentUtils.makeStatusOperation(config);
 							op = SyncOperation.fromConfig(config);
 							checkPoint = 0;		// clear check count
-						} else {
-							continue;
+							append(op);
 						}
+						continue;
 					} else {
 						checkPoint = 0;
 					}
-
+*/
 					if (op.isPartialUpdate()) {
 						// get full document
 						MongoCollection<Document> collection = getMongoCollection(op.getCollection());
 						Document updateDoc = collection.find(oplog.get("o2", Document.class)).first();
 						if (updateDoc == null) {
-							continue;	// skip update 
+							checkPoint++;
+							continue;	// deleted document
 						}
 						op.setDoc(updateDoc);
 					}
@@ -170,6 +198,7 @@ int checkPoint = 0;
 					if (op.getDoc() != null) {
 						Document filteredDoc = DocumentUtils.applyFieldFilter(op.getDoc(), includeFields, excludeFields);
 						if (filteredDoc.isEmpty()) {
+							checkPoint++;
 							continue;	// no change sync fields
 						}
 						op.setDoc(filteredDoc);

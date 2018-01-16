@@ -128,6 +128,13 @@ public class EsSyncProcess extends SyncProcess implements BulkProcessor. Listene
 		super.postProcess();
 	}
 
+	/*
+	 **********************************
+	 * (非 Javadoc)
+	 * @see info.bunji.mongodb.synces.SyncProcess#isTargetOp(info.bunji.mongodb.synces.SyncOperation)
+	 **********************************
+	 */
+	@Override
 	protected boolean isTargetOp(SyncOperation op) {
 		return EsStatusChecker.CONFIG_INDEX.equals(op.getDestDbName())
 				|| getConfig().isTargetCollection(op.getCollection());
@@ -192,7 +199,7 @@ public class EsSyncProcess extends SyncProcess implements BulkProcessor. Listene
 		// 削除処理はoplogとの不整合を防ぐため、同期で実行する
 		String syncName = getConfig().getSyncName();
 		logger.info(op.getOp() + " index:" + indexName + " type:" + op.getCollection());
-		AsyncExecutor.execute(new EsTypeDeleteProcess(esClient, getConfig(), op.getCollection())).block();
+		AsyncExecutor.execute(new EsTypeDeleteProcess(esClient, getConfig().getDestDbName(), op.getCollection())).block();
 		logger.debug("[{}] type deleted.[{}]", syncName, op.getCollection());
 
 		// TODO ステータス更新用のリクエストを追加する
@@ -243,9 +250,9 @@ public class EsSyncProcess extends SyncProcess implements BulkProcessor. Listene
 		return _processor;
 	}
 
-	/**
+	/*
 	 ********************************************
-	 * バルク処理の開始前に呼び出される.
+	 * (non Javadoc)
 	 * @see org.elasticsearch.action.bulk.BulkProcessor.Listener#beforeBulk(long, org.elasticsearch.action.bulk.BulkRequest)
 	 ********************************************
 	 */
@@ -255,15 +262,17 @@ public class EsSyncProcess extends SyncProcess implements BulkProcessor. Listene
 		BsonTimestamp ts = getCurOplogTs();	// 既に更新されているかも？
 		requestOplogTs.put(executionId, ts);
 
+//request.requests().get(0);
+
 		// add status update request.
 		SyncConfig config = getConfig();
 		config.setLastOpTime(ts);
 		request.add(makeIndexRequest(SyncOperation.fromConfig(config)));
 	}
 
-	/**
+	/*
 	 ********************************************
-	 * バルク処理の終了時(エラーあり)に呼び出される.
+	 * (non Javadoc)
 	 * @see org.elasticsearch.action.bulk.BulkProcessor.Listener#afterBulk(long, org.elasticsearch.action.bulk.BulkRequest, java.lang.Throwable)
 	 ********************************************
 	 */
@@ -271,7 +280,7 @@ public class EsSyncProcess extends SyncProcess implements BulkProcessor. Listene
 	public void afterBulk(long executionId, BulkRequest request, Throwable failure) {
 
 		BulkDetail detail = new BulkDetail(request);
-		logger.error(String.format("[%s] bulk failure. size=[%d] oplog=[%s] op=[upsert={%d}/delete={%d}/other={%d}] : %s",
+		logger.error(String.format("[%s] bulk failure. size=[%d] oplog=[%s] op=[u=%d/d=%d/o=%d] : %s",
 				getConfig().getSyncName(),
 				detail.getLength(),
 				DocumentUtils.toDateStr(requestOplogTs.get(executionId)),
@@ -303,9 +312,9 @@ public class EsSyncProcess extends SyncProcess implements BulkProcessor. Listene
 		}
 	}
 
-	/**
+	/*
 	 ********************************************
-	 * バルク処理の終了時に呼び出される.
+	 * (non Javadoc)
 	 * @see org.elasticsearch.action.bulk.BulkProcessor.Listener#afterBulk(long, org.elasticsearch.action.bulk.BulkRequest, org.elasticsearch.action.bulk.BulkResponse)
 	 ********************************************
 	 */
@@ -313,7 +322,7 @@ public class EsSyncProcess extends SyncProcess implements BulkProcessor. Listene
 	public void afterBulk(long executionId, BulkRequest request, BulkResponse response) {
 		BulkDetail detail = new BulkDetail(response);
 		if (logger.isTraceEnabled() && !detail.isEmpty()) {
-			logger.debug(String.format("[%s] bulk size=[%4d] oplog=[%s] op=[upsert=%d/delete=%d/other=%d](%4dms)",
+			logger.debug(String.format("[%s] bulk size=[%4d] oplog=[%s] op=[u=%d/d=%d/o=%d](%4dms)",
 					getConfig().getSyncName(),
 					detail.getLength(),
 					DocumentUtils.toDateStr(requestOplogTs.get(executionId)),
